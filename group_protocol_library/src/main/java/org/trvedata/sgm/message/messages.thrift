@@ -11,6 +11,23 @@ struct AeadMessage {
 // ***********************************************************************
 // Structs for serializing MembershipSet
 
+struct MemberInfoStruct {
+    1: required binary id, // IdentityKey (serialized)
+    2: optional i32 adder,
+    3: optional i32 messageNumber,
+    4: required list<i32> removeMessages,
+    5: required set<i32> acks,
+}
+
+
+struct RemoveInfoStruct {
+    1: required i32 remover,
+    2: required i32 messageNumber,
+    3: required set<i32> removedUsers,
+    4: required set<i32> acks,
+}
+
+
 struct MembershipSetStruct {
     // Instead of explicitly labelling members as non-removed or removed,
     // we use the fact that members are removed iff they have a RemoveInfoStruct.
@@ -23,21 +40,6 @@ struct MembershipSetStruct {
     // From now on we denote members by indices in the above list instead of serialized IdentityKey's.
     2: required list<RemoveInfoStruct> removeInfos,
     // From now on we denote RemoveInfo's by indices in the removeInfos list instead of RemoveInfoStruct's.
-}
-
-struct MemberInfoStruct {
-    1: required binary id, // IdentityKey (serialized)
-    2: optional i32 adder,
-    3: optional i32 messageNumber,
-    4: required list<i32> removeMessages,
-    5: required set<i32> acks,
-}
-
-struct RemoveInfoStruct {
-    1: required i32 remover,
-    2: required i32 messageNumber,
-    3: required set<i32> removedUsers,
-    4: required set<i32> acks,
 }
 
 //***********************************************************************
@@ -55,6 +57,22 @@ struct ModularMessageStruct {
     3: required binary content,
     4: optional binary orderInfo,//required except for group creation message, when it is null
     5: optional binary signatureUpdate,
+}
+
+enum FullDcgkaMessageType {
+    CREATE,
+    UPDATE,
+    REMOVE,
+    ADD,
+    WELCOME,
+    ACK,
+    ACK_WITH_UPDATE,
+    ADD_ACK,
+}
+
+struct FullDcgkaMessage {
+    1: required FullDcgkaMessageType type,
+    2: required binary message, // one of the message types below, depending on type.
 }
 
 struct TrivialDcgkaMessage {
@@ -80,22 +98,6 @@ struct AckOrdererTimestamp {
 }
 
 // Structs for FullDcgkaProtocol
-
-enum FullDcgkaMessageType {
-    CREATE,
-    UPDATE,
-    REMOVE,
-    ADD,
-    WELCOME,
-    ACK,
-    ACK_WITH_UPDATE,
-    ADD_ACK,
-}
-
-struct FullDcgkaMessage {
-    1: required FullDcgkaMessageType type,
-    2: required binary message, // one of the message types below, depending on type.
-}
 
 struct CreateMessage {
     1: required list<binary> idsExcludingSender,
