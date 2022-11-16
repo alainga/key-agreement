@@ -59,6 +59,10 @@ public class DsgmClient extends Client {
                 dcgkaProtocol = new FullDcgkaProtocol();
                 dcgkaState = new FullDcgkaProtocol.State(identityKeyPair.getPublicKey(), preKeySecret, preKeySource);
                 break;
+            case ACCOUNTABLE:
+                dcgkaProtocol = new AccountableDcgkaProtocol();
+                dcgkaState = new FullDcgkaProtocol.State(identityKeyPair.getPublicKey(), preKeySecret, preKeySource);
+                break;
             default:
                 throw new IllegalArgumentException("Unrecognized DcgkaChoice: " + implementationConfiguration.dcgkaChoice);
         }
@@ -227,7 +231,8 @@ public class DsgmClient extends Client {
 
     public enum DcgkaChoice {
         TRIVIAL,
-        FULL
+        FULL,
+        ACCOUNTABLE
     }
 
     public static class DgmClientImplementationConfiguration {
