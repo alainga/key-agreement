@@ -75,6 +75,12 @@ struct FullDcgkaMessage {
     2: required binary message, // one of the message types below, depending on type.
 }
 
+struct AccountableDcgkaMessage {
+    1: required FullDcgkaMessageType type,
+    2: required binary message, // one of the message types below, depending on type.
+    3: required binary hash,
+}
+
 struct TrivialDcgkaMessage {
     1: required FullDcgkaMessageType type,
     2: required list<binary> added,//users intended to be added
