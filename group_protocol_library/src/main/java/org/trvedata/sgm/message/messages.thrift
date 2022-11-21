@@ -75,10 +75,26 @@ struct FullDcgkaMessage {
     2: required binary message, // one of the message types below, depending on type.
 }
 
+enum AccountableDcgkaMessageType {
+    CREATE,
+    UPDATE,
+    REMOVE,
+    ADD,
+    WELCOME,
+    ACK,
+    ACK_WITH_UPDATE,
+    ADD_ACK,
+    REVEAL,
+}
+
 struct AccountableDcgkaMessage {
-    1: required FullDcgkaMessageType type,
+    1: required AccountableDcgkaMessageType type,
     2: required binary message, // one of the message types below, depending on type.
     3: required binary hash,
+}
+
+struct RevealMessage {
+    1: required binary message, //todo
 }
 
 struct TrivialDcgkaMessage {
