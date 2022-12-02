@@ -157,6 +157,11 @@ struct AddAckMessage {
     1: required binary prfForAdded,
 }
 
+struct AccAddAckMessage { //accountable
+    1: required binary prfForAdded,
+    2: required binary hash,
+}
+
 // Structs for TwoPartyProtocol
 
 struct TwoPartyMessage {
