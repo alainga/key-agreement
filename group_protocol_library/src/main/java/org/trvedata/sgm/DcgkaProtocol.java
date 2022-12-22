@@ -35,6 +35,8 @@ public interface DcgkaProtocol<T, I, S extends DcgkaProtocol.State> {
 
     Pair<S, ControlMessage> update(S state);
 
+    Pair<S, ControlMessage> maliciousUpdate(S state, IdentityKey IDKey);
+
     /**
      * {@code causalInfo} is of parameter type {@code T}, so it need not be exactly
      * of the form described in the paper draft, although it should encode roughly that information.

@@ -113,6 +113,14 @@ public class ModularDsgm<T, I,
     }
 
     @Override
+    public Pair<State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>, byte[]> maliciousUpdate(
+            State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState> state, IdentityKey victimID) {
+        Pair<DcgkaState, DcgkaProtocol.ControlMessage> dcgkaUpdate = dcgkaProtocol.maliciousUpdate(state.dcgkaState, victimID);
+        state = state.setDcgkaState(dcgkaUpdate.getLeft());
+        return wrapAndProcess(state, dcgkaUpdate.getRight().getBytes(), true, true);
+    }
+
+    @Override
     public Pair<State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>, byte[]> send(
             State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState> state,
             byte[] plaintext) {
@@ -299,7 +307,15 @@ public class ModularDsgm<T, I,
                 }
             }
             if (message.isDcgka) {
-                DcgkaProtocol.ProcessReturn<DcgkaState> result = dcgkaProtocol.process(state.dcgkaState,
+                //todo maybe alg: construct malicious message here
+                /* AccountableDcgkaMessage accountableDcgkaMessage = new AccountableDcgkaMessage();
+                Utils.deserialize(accountableDcgkaMessage, DcgkaProtocol.ControlMessage.of(message.content).getBytes());
+                if(accountableDcgkaMessage.type == UPDATE){
+                    accountableDcgkaMessage.setHash(new byte[0]);
+                }
+                ModularMessage maliciousMessage =  */
+
+                DcgkaProtocol.ProcessReturn<DcgkaState> result = dcgkaProtocol.process(state.dcgkaState, //todo ALG: pass signature state aswell
                         DcgkaProtocol.ControlMessage.of(message.content), sender, causalInfo);
                 state = state.setDcgkaState(result.state);
                 // Process new randomness

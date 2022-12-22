@@ -8,7 +8,7 @@ import java.nio.ByteBuffer;
 
 public class IdentityKeyPair {
     final byte[] curve25519SecretKey, curve25519SigningKey;
-    final IdentityKey publicKey;
+    public final IdentityKey publicKey; //ALG: was not public
 
     /* package */ IdentityKeyPair(byte[] curve25519SecretKey, byte[] curve25519SigningKey, IdentityKey publicKey) {
         this.curve25519SecretKey = curve25519SecretKey;

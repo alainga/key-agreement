@@ -28,25 +28,27 @@ public class AccountableDcgkaTest {
         alice.send("Msg4 plain".getBytes());
     }
 
+    /* the actual malicious stuff is happening in TotalOrderSimpleNetwork when there is a message from "mallet" to "poorBob" with type update */
     private void testMalicious(final DsgmClient.DgmClientImplementationConfiguration implementationConfiguration) {
         Network network = new TotalOrderSimpleNetwork(); // default Network with instant delivery
         DsgmClientFactory.DgmClientFactoryResult factoryResult = DsgmClientFactory.createClients(network,
-                new InMemoryPreKeySource(), implementationConfiguration, "alice", "bob", "mallet");
+                new InMemoryPreKeySource(), implementationConfiguration, "alice", "poorBob", "mallet");
         DsgmClient alice = factoryResult.clients[0];
-        DsgmClient bob = factoryResult.clients[1];
+        DsgmClient poorBob = factoryResult.clients[1];
         DsgmClient mallet = factoryResult.clients[2];
         alice.addListener(new PrintingDsgmListener("alice", factoryResult.identityKeyToName));
-        bob.addListener(new PrintingDsgmListener("poorBob", factoryResult.identityKeyToName));
+        poorBob.addListener(new PrintingDsgmListener("poorBob", factoryResult.identityKeyToName));
         mallet.addListener(new PrintingDsgmListener("mallet", factoryResult.identityKeyToName));
 
-        alice.create(Arrays.asList(alice.getIdentifier(), bob.getIdentifier(), mallet.getIdentifier()));
-        alice.send("Msg1 plain".getBytes());
-        bob.send("Msg2 plain".getBytes());
+        alice.create(Arrays.asList(alice.getIdentifier(), poorBob.getIdentifier(), mallet.getIdentifier()));
+        //alice.send("Msg1 plain".getBytes());
+        //poorBob.send("Msg2 plain".getBytes());
         
-        //todo: either implement new methods and stuff or do everything manually...
+        //malicious stuff is actually happening in TotalOrderSimpleNetwork
         
         //mallet.maliciousUpdate();
-        mallet.update();
+        System.out.println("mallet calls maliciousUpdate()");
+        mallet.maliciousUpdate(poorBob.mIdentityKeyPair.publicKey);
         //callstack of update:
         /* mallelt.update();
         
@@ -85,12 +87,12 @@ public class AccountableDcgkaTest {
         
     }
 
-    @Test
+    /* @Test
     public void simpleTest() {
         testGeneral(
                 new DsgmClient.DgmClientImplementationConfiguration(
                     DsgmClient.DcgkaChoice.ACCOUNTABLE, true, true, true));
-    }
+    } */
 
     @Test
     public void maliciousTest() {

@@ -178,10 +178,26 @@ public class AccountableDcgkaProtocol implements DcgkaProtocol<AckOrderer.Timest
         return Pair.of(internal.getLeft(), ControlMessage.of(Utils.serialize(message)));
     }
 
+    public Pair<State, ControlMessage> maliciousUpdate(State state, IdentityKey victimID) {
+        Triple<State, UpdateMessage, byte[]> internal = maliciousUupdateInternal(state, victimID);
+        AccountableDcgkaMessage message = new AccountableDcgkaMessage(AccountableDcgkaMessageType.UPDATE,
+                ByteBuffer.wrap(Utils.serialize(internal.getMiddle())), ByteBuffer.wrap(internal.getRight()));
+        return Pair.of(internal.getLeft(), ControlMessage.of(Utils.serialize(message)));
+    }
+
     private Triple<State, UpdateMessage, byte[]> updateInternal(State state) {
         UpdateMessage update = new UpdateMessage();
         Triple<State, ? extends List<ByteBuffer>, byte[]> generateResult = generateSeedSecret(state,
                 state.strongRemoveDGM.queryWholeWithoutMe());
+        state = generateResult.getLeft();
+        update.setCiphertexts(generateResult.getMiddle());
+        return Triple.of(state, update, generateResult.getRight());
+    }
+
+    private Triple<State, UpdateMessage, byte[]> maliciousUupdateInternal(State state, IdentityKey victimID) {
+        UpdateMessage update = new UpdateMessage();
+        Triple<State, ? extends List<ByteBuffer>, byte[]> generateResult = maliciousGenerateSeedSecret(state,
+                state.strongRemoveDGM.queryWholeWithoutMe(), victimID);
         state = generateResult.getLeft();
         update.setCiphertexts(generateResult.getMiddle());
         return Triple.of(state, update, generateResult.getRight());
@@ -433,6 +449,30 @@ public class AccountableDcgkaProtocol implements DcgkaProtocol<AckOrderer.Timest
         return Triple.of(state.setNextSeed(secret), result, hash);
     }
 
+    private Triple<State, ? extends List<ByteBuffer>, byte[]> maliciousGenerateSeedSecret(State state, Collection<IdentityKey> recipients, IdentityKey victimID) {
+        ArrayList<ByteBuffer> result = new ArrayList<>();
+        byte[] secret = Utils.getSecureRandomBytes(Constants.KEY_SIZE_BYTES);
+        byte[] hash = Utils.hash(secret);
+        byte[] fakeSecret = Utils.getSecureRandomBytes(Constants.KEY_SIZE_BYTES);
+        byte[] fakeHash = Utils.hash(fakeSecret);
+        //todo: expose singature protocol in here: Signature signature = state.id.sign(secret);
+        List<IdentityKey> sortedRecipients =
+                recipients.stream().sorted().collect(Collectors.toList());
+        for (IdentityKey recipient : sortedRecipients) {
+            if (!recipient.equals(state.id)) {// skip me
+                if(recipient.equals(victimID)){
+                    Pair<State, byte[]> encryptReturn = encryptTo(state, recipient, fakeSecret);
+                    state = encryptReturn.getLeft();
+                    result.add(ByteBuffer.wrap(encryptReturn.getRight()));
+                }
+                Pair<State, byte[]> encryptReturn = encryptTo(state, recipient, secret);
+                state = encryptReturn.getLeft();
+                result.add(ByteBuffer.wrap(encryptReturn.getRight()));
+            }
+        }
+        return Triple.of(state.setNextSeed(secret), result, hash);
+    }
+
     private Pair<State, byte[]> encryptTo(State state, IdentityKey recipient, byte[] plaintext) {
         TwoPartyProtocol twoPartyProtocol = state.twoPartyProtocols.get(recipient);
         if (twoPartyProtocol == null) {
@@ -512,7 +552,6 @@ public class AccountableDcgkaProtocol implements DcgkaProtocol<AckOrderer.Timest
 
     private void reveal() {
         System.err.println("Error: Someone cheated!");
-        System.out.println("Info: Someone cheated!");
     }
 
     /* private ProcessReturn<State> processReveal(State state, RevealMessage reveal, IdentityKey sender,

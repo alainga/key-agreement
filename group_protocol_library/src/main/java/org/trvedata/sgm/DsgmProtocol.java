@@ -59,6 +59,8 @@ public interface DsgmProtocol<S extends DsgmProtocol.State> {
 
     Pair<S, byte[]> update(S state);
 
+    Pair<S, byte[]> maliciousUpdate(S state, IdentityKey IDKey);
+
     Pair<S, byte[]> send(S state, byte[] plaintext);
 
     /**

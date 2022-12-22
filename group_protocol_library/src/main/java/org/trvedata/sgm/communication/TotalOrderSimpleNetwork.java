@@ -6,6 +6,9 @@ import java.util.ArrayDeque;
 
 import org.trvedata.sgm.misc.Utils;
 import org.apache.thrift.TException;
+import org.trvedata.sgm.message.ModularMessage;
+import org.trvedata.sgm.DcgkaProtocol.ControlMessage;
+import org.trvedata.sgm.message.SignedMessage;
 
 public class TotalOrderSimpleNetwork extends SimpleNetwork {
     private boolean isActive = false;
@@ -20,26 +23,32 @@ public class TotalOrderSimpleNetwork extends SimpleNetwork {
         for (Client client : mIdentifierToClient.values()) {
 
             //ALG: for testing accountability
-            if(sender.name == "mallet" && client.name == "poorBob"){
-                try {
-                    System.out.println("message = "+message); //todo find place of hash in it to modify
-                    AccountableDcgkaMessage maliciousMessage = new AccountableDcgkaMessage();
-                    Utils.deserialize(maliciousMessage, message);
-                    if(maliciousMessage.getType().getValue() == 1){ //do it only if its an update
+            /* if(sender.name == "mallet" && client.name == "poorBob"){
+                SignedMessage signed;
+                signed = new SignedMessage(message);
+                ModularMessage modular;
+                modular = new ModularMessage(signed.content);
+                if(modular.isDcgka){
+                    ControlMessage control = ControlMessage.of(message.content);
+                    AccountableDcgkaMessage accountableDcgkaMessage = new AccountableDcgkaMessage();
+                    Utils.deserialize(accountableDcgkaMessage, control.getBytes());
+                    byte[] hash = accountableDcgkaMessage.getHash();
+                    if(accountableDcgkaMessage.getType().getValue() == 1){ //do it only if its an update
+                        System.out.println("Preparing malicious message");
+                        //todo
+                        AccountableDcgkaMessage maliciousMessage = new AccountableDcgkaMessage(accountableDcgkaMessage);
                         maliciousMessage.setHash(new byte[16]);
-                        byte[] mm = Utils.serialize(maliciousMessage);
-                        queuedMessages.add(Triple.of(sender, client, mm));
-                    } else {
-                        queuedMessages.add(Triple.of(sender, client, message));
-                    }
-                    
-                } catch (TException exc) {
-                    throw new IllegalArgumentException("Failed to deserialize in process", exc);
-                }
-            } else{
-                if (client != sender) queuedMessages.add(Triple.of(sender, client, message));
-
-            }
+                        ControlMessage control2 = ControlMessage.of(Utils.serialize(maliciousMessage));
+                        modular.content = control2;
+                        //modular.signatureUpdate = signatureUpdate.getRight(); //maybe todo 
+                        ModularMessage.Serialized toSign = modular.serialize();
+                        signed.content = toSign;
+                        queuedMessages.add(Triple.of(sender, client, signed.serialize()));
+                        return;
+                    } 
+                } 
+            }  */
+            if (client != sender) queuedMessages.add(Triple.of(sender, client, message));
         }
         if (!isActive) {
             // Prevent recursive calls from reaching this block

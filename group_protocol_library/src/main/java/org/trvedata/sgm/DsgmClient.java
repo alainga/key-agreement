@@ -24,7 +24,7 @@ import java.util.List;
  */
 public class DsgmClient extends Client {
 
-    private final IdentityKeyPair mIdentityKeyPair;
+    public final IdentityKeyPair mIdentityKeyPair; //ALG: private
 
     private DsgmProtocol mDsgmProtocol;
     private DsgmProtocol.State mDgmProtocolState;
@@ -134,6 +134,12 @@ public class DsgmClient extends Client {
 
     public void update() {
         Pair<? extends DsgmProtocol.State, byte[]> result = mDsgmProtocol.update(mDgmProtocolState);
+        mDgmProtocolState = result.getLeft();
+        sendMessageToGroupMembers(result.getRight());
+    }
+
+    public void maliciousUpdate(IdentityKey victimID) {
+        Pair<? extends DsgmProtocol.State, byte[]> result = mDsgmProtocol.maliciousUpdate(mDgmProtocolState, victimID);
         mDgmProtocolState = result.getLeft();
         sendMessageToGroupMembers(result.getRight());
     }
