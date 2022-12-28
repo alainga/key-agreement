@@ -167,14 +167,6 @@ public class FullDcgkaProtocol implements DcgkaProtocol<AckOrderer.Timestamp, Me
         return Pair.of(internal.getLeft(), ControlMessage.of(Utils.serialize(message)));
     }
 
-    @Override
-    public Pair<State, ControlMessage> maliciousUpdate(State state, IdentityKey IDKey) { //ALG: alibi method
-        Pair<State, UpdateMessage> internal = updateInternal(state);
-        FullDcgkaMessage message = new FullDcgkaMessage(FullDcgkaMessageType.UPDATE,
-                ByteBuffer.wrap(Utils.serialize(internal.getRight())));
-        return Pair.of(internal.getLeft(), ControlMessage.of(Utils.serialize(message)));
-    }
-
     private Pair<State, UpdateMessage> updateInternal(State state) {
         UpdateMessage update = new UpdateMessage();
         Pair<State, ? extends List<ByteBuffer>> generateResult = generateSeedSecret(state,

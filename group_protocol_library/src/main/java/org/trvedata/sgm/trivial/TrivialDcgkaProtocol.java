@@ -71,13 +71,6 @@ public class TrivialDcgkaProtocol implements DcgkaProtocol<AckOrderer.Timestamp,
     }
 
     @Override
-    public Pair<State, ControlMessage> maliciousUpdate(State state, IdentityKey IDKey) { //ALG: alibi method
-        TrivialDcgkaMessage message = new TrivialDcgkaMessage(FullDcgkaMessageType.UPDATE,
-                new ArrayList<>(), new ArrayList<>());
-        return Pair.of(state, ControlMessage.of(Utils.serialize(message)));
-    }
-
-    @Override
     public ProcessReturn<State> process(State state, ControlMessage message, IdentityKey sender,
                                         AckOrderer.Timestamp causalInfo) {
         try {
