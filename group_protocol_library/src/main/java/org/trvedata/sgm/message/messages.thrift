@@ -72,7 +72,7 @@ enum FullDcgkaMessageType {
 
 struct FullDcgkaMessage {
     1: required FullDcgkaMessageType type,
-    2: required binary message, // one of the message types below, depending on type.
+    2: required binary message, // one of the message types above, depending on type.
 }
 
 enum AccountableDcgkaMessageType {
@@ -89,8 +89,8 @@ enum AccountableDcgkaMessageType {
 
 struct AccountableDcgkaMessage {
     1: required AccountableDcgkaMessageType type,
-    2: required binary message, // one of the message types below, depending on type.
-    3: required binary hash,
+    2: required binary message, // one of the message types above, depending on type.
+    3: optional binary hash,
 }
 
 struct RevealMessage {
