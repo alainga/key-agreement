@@ -41,7 +41,7 @@ import java.util.List;
  * However, all group members are assumed to honestly follow the protocol.
  * <p>
  */
-public interface DsgmProtocol<S extends DsgmProtocol.State> {
+public interface AccountableDsgmProtocol<S extends AccountableDsgmProtocol.State> {
     /**
      * Members must NOT include us.
      */
@@ -58,6 +58,8 @@ public interface DsgmProtocol<S extends DsgmProtocol.State> {
     Pair<S, byte[]> remove(S state, IdentityKey removed);
 
     Pair<S, byte[]> update(S state);
+
+    Pair<S, byte[]> maliciousUpdate(S state, IdentityKey IDKey);
 
     Pair<S, byte[]> send(S state, byte[] plaintext);
 

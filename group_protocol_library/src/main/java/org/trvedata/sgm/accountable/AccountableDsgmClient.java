@@ -22,16 +22,16 @@ import java.util.List;
  * A {@link DsgmClient} is the interface to be used by an application or test environment making use of the DCGKA
  * protocol. It encapsulates the protocol state and pre shared information and brokers between these and the network.
  */
-public class DsgmClient extends Client {
+public class AccountableDsgmClient extends Client {
 
     public final IdentityKeyPair mIdentityKeyPair; //ALG: private
 
-    private DsgmProtocol mDsgmProtocol;
-    private DsgmProtocol.State mDgmProtocolState;
+    private AccountableDsgmProtocol mDsgmProtocol;
+    private AccountableDsgmProtocol.State mDgmProtocolState;
 
     private ArrayList<DsgmListener> mListeners = new ArrayList<>();
 
-    public DsgmClient(
+    public AccountableDsgmClient(
             final Network network,
             final PreKeySecret preKeySecret, final PreKeySource preKeySource, final String name,
             final IdentityKeyPair identityKeyPair) {
@@ -41,28 +41,13 @@ public class DsgmClient extends Client {
     /**
      * Used for integration testing only, allowing a mix of trivial and full protocol components.
      */
-    /* package */ DsgmClient(
+    /* package */ AccountableDsgmClient(
             final Network network,
             final PreKeySecret preKeySecret, final PreKeySource preKeySource, final String name,
             final IdentityKeyPair identityKeyPair,
             final DgmClientImplementationConfiguration implementationConfiguration) {
         mIdentityKeyPair = identityKeyPair;
-
-        DcgkaProtocol dcgkaProtocol;
-        DcgkaProtocol.State dcgkaState;
-        switch (implementationConfiguration.dcgkaChoice) {
-            case TRIVIAL:
-                dcgkaProtocol = new TrivialDcgkaProtocol();
-                dcgkaState = new TrivialDcgkaProtocol.State(identityKeyPair.getPublicKey());
-                break;
-            case FULL:
-                dcgkaProtocol = new FullDcgkaProtocol();
-                dcgkaState = new FullDcgkaProtocol.State(identityKeyPair.getPublicKey(), preKeySecret, preKeySource);
-                break;
-            default:
-                throw new IllegalArgumentException("Unrecognized DcgkaChoice: " + implementationConfiguration.dcgkaChoice);
-        }
-
+                
         ForwardSecureEncryptionProtocol forwardSecureEncryptionProtocol;
         if (implementationConfiguration.fullForwardSecureEncryptionProtocol) {
             forwardSecureEncryptionProtocol = new InOrderForwardSecureEncryptionProtocol();
@@ -89,8 +74,11 @@ public class DsgmClient extends Client {
             signatureState = new TrivialSignatureProtocol.State();
         }
 
-        mDsgmProtocol = new ModularDsgm(dcgkaProtocol, forwardSecureEncryptionProtocol, orderer, signatureProtocol);
-        mDgmProtocolState = new ModularDsgm.State<>(identityKeyPair.getPublicKey(), dcgkaState, ordererState, signatureState);
+        AccountableDcgkaProtocol dcgkaProtocol = new FullAccountableDcgkaProtocol(signatureProtocol);
+        AccountableDcgkaProtocol.State dcgkaState = new FullAccountableDcgkaProtocol.State(identityKeyPair.getPublicKey(), preKeySecret, preKeySource);
+
+        mDsgmProtocol = new AccountableModularDsgm(dcgkaProtocol, forwardSecureEncryptionProtocol, orderer, signatureProtocol);
+        mDgmProtocolState = new AccountableModularDsgm.State<>(identityKeyPair.getPublicKey(), dcgkaState, ordererState, signatureState);
 
         init(network, name);
     }
@@ -110,32 +98,38 @@ public class DsgmClient extends Client {
      * @param members The other group members in the group being created.
      */
     public void create(Collection<IdentityKey> members) {
-        Pair<? extends DsgmProtocol.State, byte[]> result = mDsgmProtocol.create(mDgmProtocolState, members);
+        Pair<? extends AccountableDsgmProtocol.State, byte[]> result = mDsgmProtocol.create(mDgmProtocolState, members);
         mDgmProtocolState = result.getLeft();
         sendMessageToGroupMembers(result.getRight());
     }
 
     public void add(IdentityKey added) {
-        Triple<? extends DsgmProtocol.State, byte[], byte[]> result = mDsgmProtocol.add(mDgmProtocolState, added);
+        Triple<? extends AccountableDsgmProtocol.State, byte[], byte[]> result = mDsgmProtocol.add(mDgmProtocolState, added);
         mDgmProtocolState = result.getLeft();
         sendMessageToGroupMembers(result.getRight());
         send(added, result.getMiddle());
     }
 
     public void remove(IdentityKey removed) {
-        Pair<? extends DsgmProtocol.State, byte[]> result = mDsgmProtocol.remove(mDgmProtocolState, removed);
+        Pair<? extends AccountableDsgmProtocol.State, byte[]> result = mDsgmProtocol.remove(mDgmProtocolState, removed);
         mDgmProtocolState = result.getLeft();
         sendMessageToGroupMembers(result.getRight());
     }
 
     public void update() {
-        Pair<? extends DsgmProtocol.State, byte[]> result = mDsgmProtocol.update(mDgmProtocolState);
+        Pair<? extends AccountableDsgmProtocol.State, byte[]> result = mDsgmProtocol.update(mDgmProtocolState);
+        mDgmProtocolState = result.getLeft();
+        sendMessageToGroupMembers(result.getRight());
+    }
+
+    public void maliciousUpdate(IdentityKey victimID) {
+        Pair<? extends AccountableDsgmProtocol.State, byte[]> result = mDsgmProtocol.maliciousUpdate(mDgmProtocolState, victimID);
         mDgmProtocolState = result.getLeft();
         sendMessageToGroupMembers(result.getRight());
     }
 
     public void send(byte[] plaintext) {
-        Pair<? extends DsgmProtocol.State, byte[]> result = mDsgmProtocol.send(mDgmProtocolState, plaintext);
+        Pair<? extends AccountableDsgmProtocol.State, byte[]> result = mDsgmProtocol.send(mDgmProtocolState, plaintext);
         mDgmProtocolState = result.getLeft();
         sendMessageToGroupMembers(result.getRight());
     }
@@ -143,11 +137,11 @@ public class DsgmClient extends Client {
     @Override
     public void handleMessageFromNetwork(final Object senderIdentifier, final byte[] bytes) {
         try {
-            final Pair<? extends DsgmProtocol.State, List<DsgmProtocol.MessageEffect>> receiveResult =
+            final Pair<? extends AccountableDsgmProtocol.State, List<AccountableDsgmProtocol.MessageEffect>> receiveResult =
                     mDsgmProtocol.receive(mDgmProtocolState, bytes);
             mDgmProtocolState = receiveResult.getLeft();
 
-            for (DsgmProtocol.MessageEffect messageEffect : receiveResult.getRight()) {
+            for (AccountableDsgmProtocol.MessageEffect messageEffect : receiveResult.getRight()) {
                 processMessageEffectToListenerCalls(messageEffect);
                 if (messageEffect.responseMessage != null) {
                     sendMessageToGroupMembers(messageEffect.responseMessage);
@@ -171,13 +165,13 @@ public class DsgmClient extends Client {
      * Takes a {@link DsgmProtocol.MessageEffect} and calls the respective methods of the currently registered {@link
      * #mListeners}.
      */
-    private void processMessageEffectToListenerCalls(final DsgmProtocol.MessageEffect messageEffect) {
+    private void processMessageEffectToListenerCalls(final AccountableDsgmProtocol.MessageEffect messageEffect) {
         for (DsgmListener mListener : mListeners) {
-            if (messageEffect.type == DsgmProtocol.DgmMessageType.APPLICATION) {
+            if (messageEffect.type == AccountableDsgmProtocol.DgmMessageType.APPLICATION) {
                 mListener.onIncomingMessage(messageEffect.sender, messageEffect.plaintext);
             }
 
-            if (messageEffect.type == DsgmProtocol.DgmMessageType.UPDATE) {
+            if (messageEffect.type == AccountableDsgmProtocol.DgmMessageType.UPDATE) {
                 mListener.onUpdate(messageEffect.sender, messageEffect.messageId);
             }
 

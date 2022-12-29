@@ -27,18 +27,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @param <T> The type of timestamps used by the {@link Orderer} and {@link DcgkaProtocol}.
  * @param <I> The type of info used by the {@link Orderer} and {@link DcgkaProtocol}.
  */
-public class ModularDsgm<T, I,
-        DcgkaState extends DcgkaProtocol.State,
+public class AccountableModularDsgm<T, I,
+        DcgkaState extends AccountableDcgkaProtocol.State,
         ForwardSecureEncryptionState extends ForwardSecureEncryptionProtocol.State,
         OrdererState extends Orderer.State,
         SignatureState extends SignatureProtocol.State>
-        implements DsgmProtocol<ModularDsgm.State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>> {
-    private final DcgkaProtocol<T, I, DcgkaState> dcgkaProtocol;
+        implements AccountableDsgmProtocol<AccountableModularDsgm.State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>> {
+    private final AccountableDcgkaProtocol<T, I, DcgkaState> dcgkaProtocol;
     private final ForwardSecureEncryptionProtocol<ForwardSecureEncryptionState> forwardSecureEncryptionProtocol;
     private final Orderer<Pair<ModularMessage, SignedMessage>, T, I, OrdererState> orderer;
     private final SignatureProtocol<SignatureState> signatureProtocol;
 
-    public ModularDsgm(DcgkaProtocol<T, I, DcgkaState> dcgkaProtocol,
+    public AccountableModularDsgm(AccountableDcgkaProtocol<T, I, DcgkaState> dcgkaProtocol,
                        ForwardSecureEncryptionProtocol<ForwardSecureEncryptionState> forwardSecureEncryptionProtocol,
                        Orderer<Pair<ModularMessage, SignedMessage>, T, I, OrdererState> orderer,
                        SignatureProtocol<SignatureState> signatureProtocol) {
@@ -52,7 +52,7 @@ public class ModularDsgm<T, I,
     public Pair<State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>, byte[]> create(
             State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState> state,
             Collection<IdentityKey> members) {
-        Pair<DcgkaState, DcgkaProtocol.ControlMessage> dcgkaWelcome = dcgkaProtocol.create(state.dcgkaState, members);
+        Pair<DcgkaState, AccountableDcgkaProtocol.ControlMessage> dcgkaWelcome = dcgkaProtocol.create(state.dcgkaState, members);
         state = state.setDcgkaState(dcgkaWelcome.getLeft());
         ModularMessage welcome = new ModularMessage(true, true, dcgkaWelcome.getRight().getBytes(),
                 Orderer.OrderInfo.of(null));
@@ -74,7 +74,7 @@ public class ModularDsgm<T, I,
         if (getMembers(state).contains(added)) {
             throw new IllegalArgumentException("add called for existing member " + added);
         }
-        Triple<DcgkaState, DcgkaProtocol.ControlMessage, DcgkaProtocol.ControlMessage> dcgkaMessages =
+        Triple<DcgkaState, AccountableDcgkaProtocol.ControlMessage, AccountableDcgkaProtocol.ControlMessage> dcgkaMessages =
                 dcgkaProtocol.add(state.dcgkaState, added);
         state = state.setDcgkaState(dcgkaMessages.getLeft());
         Pair<State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>, byte[]> add =
@@ -99,7 +99,7 @@ public class ModularDsgm<T, I,
         if (removed.equals(state.id)) {
             throw new NotImplementedException("Don't yet support removing ourselves");
         }
-        Pair<DcgkaState, DcgkaProtocol.ControlMessage> dcgkaRemove = dcgkaProtocol.remove(state.dcgkaState, removed);
+        Pair<DcgkaState, AccountableDcgkaProtocol.ControlMessage> dcgkaRemove = dcgkaProtocol.remove(state.dcgkaState, removed);
         state = state.setDcgkaState(dcgkaRemove.getLeft());
         return wrapAndProcess(state, dcgkaRemove.getRight().getBytes(), true, true);
     }
@@ -107,7 +107,15 @@ public class ModularDsgm<T, I,
     @Override
     public Pair<State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>, byte[]> update(
             State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState> state) {
-        Pair<DcgkaState, DcgkaProtocol.ControlMessage> dcgkaUpdate = dcgkaProtocol.update(state.dcgkaState);
+        Pair<DcgkaState, AccountableDcgkaProtocol.ControlMessage> dcgkaUpdate = dcgkaProtocol.update(state.dcgkaState, state.signatureState);
+        state = state.setDcgkaState(dcgkaUpdate.getLeft());
+        return wrapAndProcess(state, dcgkaUpdate.getRight().getBytes(), true, true);
+    }
+
+    @Override
+    public Pair<State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>, byte[]> maliciousUpdate(
+            State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState> state, IdentityKey victimID) {
+        Pair<DcgkaState, AccountableDcgkaProtocol.ControlMessage> dcgkaUpdate = dcgkaProtocol.maliciousUpdate(state.dcgkaState, victimID);
         state = state.setDcgkaState(dcgkaUpdate.getLeft());
         return wrapAndProcess(state, dcgkaUpdate.getRight().getBytes(), true, true);
     }
@@ -307,8 +315,8 @@ public class ModularDsgm<T, I,
                 }
                 ModularMessage maliciousMessage =  */
 
-                DcgkaProtocol.ProcessReturn<DcgkaState> result = dcgkaProtocol.process(state.dcgkaState, //todo ALG: pass signature state aswell
-                        DcgkaProtocol.ControlMessage.of(message.content), sender, causalInfo);
+                AccountableDcgkaProtocol.ProcessReturn<DcgkaState> result = dcgkaProtocol.process(state.dcgkaState, //todo ALG: pass signature state aswell
+                    AccountableDcgkaProtocol.ControlMessage.of(message.content), sender, causalInfo);
                 state = state.setDcgkaState(result.state);
                 // Process new randomness
                 if (result.updateSecret != null) {
@@ -386,11 +394,11 @@ public class ModularDsgm<T, I,
     }
 
     public static class State<
-            DcgkaState extends DcgkaProtocol.State,
+            DcgkaState extends AccountableDcgkaProtocol.State,
             ForwardSecureEncryptionState extends ForwardSecureEncryptionProtocol.State,
             OrdererState extends Orderer.State,
             SignatureState extends SignatureProtocol.State>
-            implements DsgmProtocol.State {
+            implements AccountableDsgmProtocol.State {
         private final IdentityKey id;
         private final DcgkaState dcgkaState;
         // Note that we only need one ForwardSecureEncryptionState per group member because we assume that
