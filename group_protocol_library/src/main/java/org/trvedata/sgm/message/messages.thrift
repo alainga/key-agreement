@@ -91,6 +91,7 @@ struct AccountableDcgkaMessage {
     1: required AccountableDcgkaMessageType type,
     2: required binary message, // one of the message types above, depending on type.
     3: optional binary hash,
+    4: optional binary signature
 }
 
 struct RevealMessage {
