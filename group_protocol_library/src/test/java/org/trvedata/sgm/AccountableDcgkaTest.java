@@ -4,20 +4,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.trvedata.sgm.communication.Network;
 import org.trvedata.sgm.communication.TotalOrderSimpleNetwork;
 import org.trvedata.sgm.crypto.InMemoryPreKeySource;
-import org.trvedata.sgm.testhelper.PrintingDsgmListener;
+import org.trvedata.sgm.testhelper.AccountablePrintingDsgmListener;
 import java.util.Arrays;
 
 
 public class AccountableDcgkaTest {
 
-    private void testGeneral(final DsgmClient.DgmClientImplementationConfiguration implementationConfiguration) {
+    private void testGeneral(final AccountableDsgmClient.DgmClientImplementationConfiguration implementationConfiguration) {
         Network network = new TotalOrderSimpleNetwork(); // default Network with instant delivery
-        DsgmClientFactory.DgmClientFactoryResult factoryResult = DsgmClientFactory.createClients(network,
+        AccountableDsgmClientFactory.DgmClientFactoryResult factoryResult = AccountableDsgmClientFactory.createClients(network,
                 new InMemoryPreKeySource(), implementationConfiguration, "alice", "bob");
-        DsgmClient alice = factoryResult.clients[0];
-        DsgmClient bob = factoryResult.clients[1];
-        alice.addListener(new PrintingDsgmListener("alice", factoryResult.identityKeyToName));
-        bob.addListener(new PrintingDsgmListener("bob", factoryResult.identityKeyToName));
+        AccountableDsgmClient alice = factoryResult.clients[0];
+        AccountableDsgmClient bob = factoryResult.clients[1];
+        alice.addListener(new AccountablePrintingDsgmListener("alice", factoryResult.identityKeyToName));
+        bob.addListener(new AccountablePrintingDsgmListener("bob", factoryResult.identityKeyToName));
 
         //System.out.println("type of state: " +alice.mDgmProtocolState.dcgkaProtocol.getClass());
         alice.create(Arrays.asList(alice.getIdentifier(), bob.getIdentifier()));
@@ -29,16 +29,16 @@ public class AccountableDcgkaTest {
     }
 
     /* the actual malicious stuff is happening in TotalOrderSimpleNetwork when there is a message from "mallet" to "poorBob" with type update */
-    private void testMalicious(final DsgmClient.DgmClientImplementationConfiguration implementationConfiguration) {
+    private void testMalicious(final AccountableDsgmClient.DgmClientImplementationConfiguration implementationConfiguration) {
         Network network = new TotalOrderSimpleNetwork(); // default Network with instant delivery
-        DsgmClientFactory.DgmClientFactoryResult factoryResult = DsgmClientFactory.createClients(network,
+        AccountableDsgmClientFactory.DgmClientFactoryResult factoryResult = AccountableDsgmClientFactory.createClients(network,
                 new InMemoryPreKeySource(), implementationConfiguration, "alice", "poorBob", "mallet");
-        DsgmClient alice = factoryResult.clients[0];
-        DsgmClient poorBob = factoryResult.clients[1];
-        DsgmClient mallet = factoryResult.clients[2];
-        alice.addListener(new PrintingDsgmListener("alice", factoryResult.identityKeyToName));
-        poorBob.addListener(new PrintingDsgmListener("poorBob", factoryResult.identityKeyToName));
-        mallet.addListener(new PrintingDsgmListener("mallet", factoryResult.identityKeyToName));
+        AccountableDsgmClient alice = factoryResult.clients[0];
+        AccountableDsgmClient poorBob = factoryResult.clients[1];
+        AccountableDsgmClient mallet = factoryResult.clients[2];
+        alice.addListener(new AccountablePrintingDsgmListener("alice", factoryResult.identityKeyToName));
+        poorBob.addListener(new AccountablePrintingDsgmListener("poorBob", factoryResult.identityKeyToName));
+        mallet.addListener(new AccountablePrintingDsgmListener("mallet", factoryResult.identityKeyToName));
 
         alice.create(Arrays.asList(alice.getIdentifier(), poorBob.getIdentifier(), mallet.getIdentifier()));
         //alice.send("Msg1 plain".getBytes());
@@ -87,20 +87,17 @@ public class AccountableDcgkaTest {
         
     }
 
-    /* @Test
+    @Test
     public void simpleTest() {
         testGeneral(
-                new DsgmClient.DgmClientImplementationConfiguration(
-                    DsgmClient.DcgkaChoice.ACCOUNTABLE, true, true, true));
-    } */
+                new AccountableDsgmClient.DgmClientImplementationConfiguration(
+                    AccountableDsgmClient.DcgkaChoice.ACCOUNTABLE, true, true, true));
+    }
 
     @Test
     public void maliciousTest() {
         testMalicious(
-                new DsgmClient.DgmClientImplementationConfiguration(
-                    DsgmClient.DcgkaChoice.ACCOUNTABLE, true, true, true));
-    }
-
-    
-    
+                new AccountableDsgmClient.DgmClientImplementationConfiguration(
+                    AccountableDsgmClient.DcgkaChoice.ACCOUNTABLE, true, true, true));
+    } 
 }
