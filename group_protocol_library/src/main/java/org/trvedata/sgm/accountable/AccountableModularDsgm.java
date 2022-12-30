@@ -52,7 +52,7 @@ public class AccountableModularDsgm<T, I,
     public Pair<State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>, byte[]> create(
             State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState> state,
             Collection<IdentityKey> members) {
-        Pair<DcgkaState, AccountableDcgkaProtocol.ControlMessage> dcgkaWelcome = dcgkaProtocol.create(state.dcgkaState, members);
+        Pair<DcgkaState, AccountableDcgkaProtocol.ControlMessage> dcgkaWelcome = dcgkaProtocol.create(state.dcgkaState, members, state.signatureState);
         state = state.setDcgkaState(dcgkaWelcome.getLeft());
         ModularMessage welcome = new ModularMessage(true, true, dcgkaWelcome.getRight().getBytes(),
                 Orderer.OrderInfo.of(null));
@@ -75,7 +75,7 @@ public class AccountableModularDsgm<T, I,
             throw new IllegalArgumentException("add called for existing member " + added);
         }
         Triple<DcgkaState, AccountableDcgkaProtocol.ControlMessage, AccountableDcgkaProtocol.ControlMessage> dcgkaMessages =
-                dcgkaProtocol.add(state.dcgkaState, added);
+                dcgkaProtocol.add(state.dcgkaState, added, state.signatureState);
         state = state.setDcgkaState(dcgkaMessages.getLeft());
         Pair<State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>, byte[]> add =
                 wrapAndProcess(state, dcgkaMessages.getRight().getBytes(), true, true);
@@ -99,7 +99,7 @@ public class AccountableModularDsgm<T, I,
         if (removed.equals(state.id)) {
             throw new NotImplementedException("Don't yet support removing ourselves");
         }
-        Pair<DcgkaState, AccountableDcgkaProtocol.ControlMessage> dcgkaRemove = dcgkaProtocol.remove(state.dcgkaState, removed);
+        Pair<DcgkaState, AccountableDcgkaProtocol.ControlMessage> dcgkaRemove = dcgkaProtocol.remove(state.dcgkaState, removed, state.signatureState);
         state = state.setDcgkaState(dcgkaRemove.getLeft());
         return wrapAndProcess(state, dcgkaRemove.getRight().getBytes(), true, true);
     }
@@ -115,7 +115,7 @@ public class AccountableModularDsgm<T, I,
     @Override
     public Pair<State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState>, byte[]> maliciousUpdate(
             State<DcgkaState, ForwardSecureEncryptionState, OrdererState, SignatureState> state, IdentityKey victimID) {
-        Pair<DcgkaState, AccountableDcgkaProtocol.ControlMessage> dcgkaUpdate = dcgkaProtocol.maliciousUpdate(state.dcgkaState, victimID);
+        Pair<DcgkaState, AccountableDcgkaProtocol.ControlMessage> dcgkaUpdate = dcgkaProtocol.maliciousUpdate(state.dcgkaState, victimID, state.signatureState);
         state = state.setDcgkaState(dcgkaUpdate.getLeft());
         return wrapAndProcess(state, dcgkaUpdate.getRight().getBytes(), true, true);
     }

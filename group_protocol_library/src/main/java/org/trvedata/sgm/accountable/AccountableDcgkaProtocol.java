@@ -24,18 +24,18 @@ public interface AccountableDcgkaProtocol<T, I, S extends AccountableDcgkaProtoc
     /**
      * Members must NOT include us, as in the paper.
      */
-    Pair<S, ControlMessage> create(S state, Collection<IdentityKey> members);
+    Pair<S, ControlMessage> create(S state, Collection<IdentityKey> members, SignatureProtocol.State singatureState);
 
     /**
      * As in the paper draft, the return order is (welcome, add).
      */
-    Triple<S, ControlMessage, ControlMessage> add(S state, IdentityKey added);
+    Triple<S, ControlMessage, ControlMessage> add(S state, IdentityKey added, SignatureProtocol.State singatureState);
 
-    Pair<S, ControlMessage> remove(S state, IdentityKey removed);
+    Pair<S, ControlMessage> remove(S state, IdentityKey removed, SignatureProtocol.State singatureState);
 
     Pair<S, ControlMessage> update(S state, SignatureProtocol.State singatureState);
 
-    Pair<S, ControlMessage> maliciousUpdate(S state, IdentityKey IDKey);
+    Pair<S, ControlMessage> maliciousUpdate(S state, IdentityKey IDKey, SignatureProtocol.State singatureState);
 
     /**
      * {@code causalInfo} is of parameter type {@code T}, so it need not be exactly
