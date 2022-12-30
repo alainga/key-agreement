@@ -28,6 +28,26 @@ public class AccountableDcgkaTest {
         alice.send("Msg4 plain".getBytes());
     }
 
+    private void testAdd(final AccountableDsgmClient.DgmClientImplementationConfiguration implementationConfiguration) {
+        Network network = new TotalOrderSimpleNetwork(); // default Network with instant delivery
+        AccountableDsgmClientFactory.DgmClientFactoryResult factoryResult = AccountableDsgmClientFactory.createClients(network,
+                new InMemoryPreKeySource(), implementationConfiguration, "alice", "bob", "charlie");
+        AccountableDsgmClient alice = factoryResult.clients[0];
+        AccountableDsgmClient bob = factoryResult.clients[1];
+        AccountableDsgmClient charlie = factoryResult.clients[2];
+        alice.addListener(new AccountablePrintingDsgmListener("alice", factoryResult.identityKeyToName));
+        bob.addListener(new AccountablePrintingDsgmListener("bob", factoryResult.identityKeyToName));
+        charlie.addListener(new AccountablePrintingDsgmListener("charlie", factoryResult.identityKeyToName));
+
+        //System.out.println("type of state: " +alice.mDgmProtocolState.dcgkaProtocol.getClass());
+        alice.create(Arrays.asList(alice.getIdentifier(), bob.getIdentifier()));
+        alice.send("Msg1 plain".getBytes());
+        bob.send("Msg2 plain".getBytes());
+        alice.add(charlie.getIdentifier());
+        bob.send("Msg3 plain".getBytes());
+        alice.send("Msg4 plain".getBytes());
+    }
+
     /* the actual malicious stuff is happening in TotalOrderSimpleNetwork when there is a message from "mallet" to "poorBob" with type update */
     private void testMalicious(final AccountableDsgmClient.DgmClientImplementationConfiguration implementationConfiguration) {
         Network network = new TotalOrderSimpleNetwork(); // default Network with instant delivery
@@ -90,6 +110,13 @@ public class AccountableDcgkaTest {
     @Test
     public void simpleTest() {
         testGeneral(
+                new AccountableDsgmClient.DgmClientImplementationConfiguration(
+                    AccountableDsgmClient.DcgkaChoice.ACCOUNTABLE, true, true, true));
+    }
+
+    @Test
+    public void addTest() {
+        testAdd(
                 new AccountableDsgmClient.DgmClientImplementationConfiguration(
                     AccountableDsgmClient.DcgkaChoice.ACCOUNTABLE, true, true, true));
     }
