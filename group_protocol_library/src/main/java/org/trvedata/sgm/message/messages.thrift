@@ -91,7 +91,12 @@ struct AccountableDcgkaMessage {
     1: required AccountableDcgkaMessageType type,
     2: required binary message, // one of the message types above, depending on type.
     3: optional binary hash,
-    4: optional binary signature
+}
+
+struct AccountableDM {
+    1: required binary secret,
+    2: required binary signature,
+    3: optional binary history,
 }
 
 struct RevealMessage {
@@ -161,6 +166,7 @@ struct AddAckMessage {
 struct AccAddAckMessage { //accountable
     1: required binary prfForAdded,
     2: required binary hash,
+    3: required binary history,
 }
 
 // Structs for TwoPartyProtocol

@@ -78,10 +78,9 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
 
     
-    public Pair<State, ControlMessage> create(State state, Collection<IdentityKey> members) {
-        System.out.println("create in ACC is called");
+    public Pair<State, ControlMessage> create(State state, Collection<IdentityKey> members, SignatureProtocol.State signatureState) {
         CreateMessage create = new CreateMessage();
-        Triple<State, ? extends List<ByteBuffer>, byte[]> generateResult = generateSeedSecret(state, members);
+        Triple<State, ? extends List<ByteBuffer>, byte[]> generateResult = generateSeedSecret(state, members, signatureState);
         state = generateResult.getLeft();
         create.setCiphertexts(generateResult.getMiddle());
         for (IdentityKey member : members) {
@@ -89,11 +88,8 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         }
         AccountableDcgkaMessage message = new AccountableDcgkaMessage(AccountableDcgkaMessageType.CREATE,
                 ByteBuffer.wrap(Utils.serialize(create)));
-        byte[] hashAndSingature = generateResult.getRight();
-        byte[] hash = Arrays.copyOfRange(hashAndSingature, 0, 32); //32 because SHA-256
-        byte[] signature = Arrays.copyOfRange(hashAndSingature, 32, hashAndSingature.length);
+        byte[] hash = generateResult.getRight();
         message.setHash(hash); 
-        message.setSignature(signature);
         return Pair.of(state, ControlMessage.of(Utils.serialize(message)));
     }
 
@@ -182,16 +178,13 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         Triple<State, UpdateMessage, byte[]> internal = updateInternal(state, signatureState);
         AccountableDcgkaMessage message = new AccountableDcgkaMessage(AccountableDcgkaMessageType.UPDATE,
                 ByteBuffer.wrap(Utils.serialize(internal.getMiddle())));
-        byte[] hashAndSingature = internal.getRight();
-        byte[] hash = Arrays.copyOfRange(hashAndSingature, 0, 32); //32 because SHA-256
-        byte[] signature = Arrays.copyOfRange(hashAndSingature, 32, hashAndSingature.length);
+        byte[] hash = internal.getRight();
         message.setHash(hash); 
-        message.setSignature(signature);        
         return Pair.of(internal.getLeft(), ControlMessage.of(Utils.serialize(message)));
     }
 
-    public Pair<State, ControlMessage> maliciousUpdate(State state, IdentityKey victimID) {
-        Triple<State, UpdateMessage, byte[]> internal = maliciousUpdateInternal(state, victimID);
+    public Pair<State, ControlMessage> maliciousUpdate(State state, IdentityKey victimID, SignatureProtocol.State signatureState) {
+        Triple<State, UpdateMessage, byte[]> internal = maliciousUpdateInternal(state, victimID, signatureState);
         AccountableDcgkaMessage message = new AccountableDcgkaMessage(AccountableDcgkaMessageType.UPDATE,
                 ByteBuffer.wrap(Utils.serialize(internal.getMiddle())));
         message.setHash(internal.getRight());     
@@ -217,10 +210,10 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         return Triple.of(state, update, generateResult.getRight());
     }
 
-    private Triple<State, UpdateMessage, byte[]> maliciousUpdateInternal(State state, IdentityKey victimID) {
+    private Triple<State, UpdateMessage, byte[]> maliciousUpdateInternal(State state, IdentityKey victimID, SignatureProtocol.State signatureState) {
         UpdateMessage update = new UpdateMessage();
         Triple<State, ? extends List<ByteBuffer>, byte[]> generateResult = maliciousGenerateSeedSecret(state,
-                state.strongRemoveDGM.queryWholeWithoutMe(), victimID);
+                state.strongRemoveDGM.queryWholeWithoutMe(), victimID, signatureState);
         state = generateResult.getLeft();
         update.setCiphertexts(generateResult.getMiddle());
         return Triple.of(state, update, generateResult.getRight());
@@ -244,23 +237,20 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
 
     
-    public Pair<State, ControlMessage> remove(State state, IdentityKey removed) {
+    public Pair<State, ControlMessage> remove(State state, IdentityKey removed, SignatureProtocol.State signatureState) {
         RemoveMessage remove = new RemoveMessage();
         HashSet<IdentityKey> recipients = state.strongRemoveDGM.queryWholeWithoutMe();
         recipients.remove(removed);
         Triple<State, ? extends List<ByteBuffer>, byte[]> generateResult = generateSeedSecret(state,
-                recipients);
+                recipients, signatureState);
         state = generateResult.getLeft();
         remove.setCiphertexts(generateResult.getMiddle());
         remove.setRemoved(removed.serialize());
 
         AccountableDcgkaMessage message = new AccountableDcgkaMessage(AccountableDcgkaMessageType.REMOVE,
                 ByteBuffer.wrap(Utils.serialize(remove)));
-        byte[] hashAndSingature = generateResult.getRight();
-        byte[] hash = Arrays.copyOfRange(hashAndSingature, 0, 32); //32 because SHA-256
-        byte[] signature = Arrays.copyOfRange(hashAndSingature, 32, hashAndSingature.length);
+        byte[] hash = generateResult.getRight();
         message.setHash(hash); 
-        message.setSignature(signature);
         return Pair.of(state, ControlMessage.of(Utils.serialize(message)));
     }
 
@@ -320,11 +310,17 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
 
     
-    public Triple<State, ControlMessage, ControlMessage> add(State state, IdentityKey added) {
+    public Triple<State, ControlMessage, ControlMessage> add(State state, IdentityKey added, SignatureProtocol.State signatureState) {
         // TODO: new user should add themselves after deserializing
         // TODO: once MembershipSet is immutable, instead of doing that, serialize the MembershipSet
         // with the new user added?  Change in process as well.
-        Pair<State, byte[]> myPrfForAdded = encryptTo(state, added, state.prfPrngs.get(state.id));
+        //todo AG: accountability for history
+        byte[] seed = state.prfPrngs.get(state.id);
+        byte[] history = state.strongRemoveDGM.serialize().getLeft();
+        byte[] signature = signatureProtocol.getSignature(signatureState, seed).getBytes(); //todo AG: include sequence number
+        AccountableDM dm = new AccountableDM(ByteBuffer.wrap(seed), ByteBuffer.wrap(signature));
+        dm.setHistory(ByteBuffer.wrap(history));
+        Pair<State, byte[]> myPrfForAdded = encryptTo(state, added, Utils.serialize(dm));
         state = myPrfForAdded.getLeft();
         WelcomeMessage welcome = new WelcomeMessage(ByteBuffer.wrap(state.strongRemoveDGM.serialize().getLeft()),
                 ByteBuffer.wrap(myPrfForAdded.getRight()));
@@ -362,10 +358,18 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         ControlMessage response;
         if (sender.equals(state.id)) response = ControlMessage.of(null);
         else {
+
+            byte[] addersRatchetState = state.prfPrngs.get(sender);
+            byte[] history = state.strongRemoveDGM.serialize().getLeft();
+            //byte[] signature = signatureProtocol.getSignature(signatureState, secret).getBytes(); //todo AG: include sequence number
+            //AccountableDM dm = new AccountableDM(ByteBuffer.wrap(seed), ByteBuffer.wrap(signature));
+            //dm.setHistory(ByteBuffer.wrap(history));
+            //Pair<State, byte[]> myPrfForAdded = encryptTo(state, added, Utils.serialize(dm));
+
             Pair<State, byte[]> myPrfForAdded = encryptTo(state, added, state.prfPrngs.get(state.id));
             state = myPrfForAdded.getLeft();
-            byte[] hash = Utils.hash(state.prfPrngs.get(sender));
-            AccAddAckMessage addAck = new AccAddAckMessage(ByteBuffer.wrap(myPrfForAdded.getRight()), ByteBuffer.wrap(hash));
+            byte[] hash = Utils.hash(addersRatchetState);
+            AccAddAckMessage addAck = new AccAddAckMessage(ByteBuffer.wrap(myPrfForAdded.getRight()), ByteBuffer.wrap(hash), ByteBuffer.wrap(history));
             AccountableDcgkaMessage addAckWrapped = new AccountableDcgkaMessage(AccountableDcgkaMessageType.ADD_ACK,
                     ByteBuffer.wrap(Utils.serialize(addAck)));
             response = ControlMessage.of(Utils.serialize(addAckWrapped));
@@ -395,7 +399,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             state = decryptionResult.getLeft();
             state = state.putChainKey(sender, decryptionResult.getRight());
             //alain: compare ratchets
-            if (!Arrays.equals(state.initialSeed, ack.getHash())){
+            if (!Arrays.equals(state.initialSeed, ack.getHash()) || !historyIsValid(ack.getHistory())){
                 reveal(state); //todo: return
             }
         }
@@ -413,22 +417,35 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
                 Collections.emptyList(), causalInfo.messageId, ackedMessageIds);
     }
 
+    private boolean historyIsValid(byte[] otherHistory) {
+        //todo AG: check that history stored in state (received by adder) is prefix of otherHistory
+        return true;
+    }
+
     private ProcessReturn<State> processWelcome(State state, WelcomeMessage welcome, IdentityKey sender,
                                                 AckOrderer.Timestamp causalInfo) {
         StrongRemoveDgm strongRemoveDGM = StrongRemoveDgm.deserialize(welcome.getStrongRemoveDgm(), state.id)
                 .getLeft();
         strongRemoveDGM.add(sender, state.id, causalInfo.messageId);
-        state = state.setStrongRemoveDGM(strongRemoveDGM);
+        state = state.setStrongRemoveDGM(strongRemoveDGM); //todo AG: also store in state for later comparison
         state = state.setAddMessageId(causalInfo.messageId);
         // If the Welcome is not for us, two-party decryption will fail, so decrypt will throw an
         // IllegalArgumentException.  Thus we fulfill the condition stated in the Javadoc for
         // DcgkaProtocol.process.
         Pair<State, byte[]> decryptReturn = decryptFrom(state, sender, welcome.getPrfForAdded());
         state = decryptReturn.getLeft();
-        state = state.putChainKey(sender, decryptReturn.getRight());
-        
-        //alain: store received ratchet in state
-        byte[] hash = Utils.hash(decryptReturn.getRight());
+        AccountableDM dm = new AccountableDM();
+        try {
+            Utils.deserialize(dm, decryptReturn.getRight());
+        } catch (TException exc) {
+            throw new IllegalArgumentException("Failed to deserialize in processWelcome", exc);
+        }
+        state = state.putChainKey(sender, dm.getSecret());
+        state = state.putInitialHistory(dm.getHistory());
+        state = state.putAddSignature(dm.getSignature());
+        //todo AG: maybe check signature
+        //store received ratchet in state
+        byte[] hash = Utils.hash(dm.getSecret());
         state = state.putInitialSeed(hash);
 
         Pair<State, ForwardSecureEncryptionProtocol.Key> prngWelcome = prng(state,
@@ -481,40 +498,45 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         byte[] secret = Utils.getSecureRandomBytes(Constants.KEY_SIZE_BYTES);
         byte[] hash = Utils.hash(secret);
         byte[] signature = signatureProtocol.getSignature(signatureState, secret).getBytes(); //todo AG: include sequence number
-        byte[] hashAndSignature = new byte[hash.length + signature.length];
-        System.arraycopy(hash, 0, hashAndSignature, 0, hash.length);
-        System.arraycopy(signature, 0, hashAndSignature, hash.length, signature.length);
+        AccountableDM dm = new AccountableDM(ByteBuffer.wrap(secret), ByteBuffer.wrap(signature));
         List<IdentityKey> sortedRecipients =
                 recipients.stream().sorted().collect(Collectors.toList());
         for (IdentityKey recipient : sortedRecipients) {
             if (!recipient.equals(state.id)) {// skip me
-                Pair<State, byte[]> encryptReturn = encryptTo(state, recipient, secret);
+                Pair<State, byte[]> encryptReturn = encryptTo(state, recipient, Utils.serialize(dm));
                 state = encryptReturn.getLeft();
                 result.add(ByteBuffer.wrap(encryptReturn.getRight()));
             }
         }
-        return Triple.of(state.setNextSeed(secret), result, hashAndSignature);
+        return Triple.of(state.setNextSeed(secret), result, hash);
     }
 
-    private Triple<State, ? extends List<ByteBuffer>, byte[]> maliciousGenerateSeedSecret(State state, Collection<IdentityKey> recipients, IdentityKey victimID) {
+    private Triple<State, ? extends List<ByteBuffer>, byte[]> maliciousGenerateSeedSecret(State state, Collection<IdentityKey> recipients, IdentityKey victimID, SignatureProtocol.State signatureState) {
         ArrayList<ByteBuffer> result = new ArrayList<>();
+        //correct
         byte[] secret = Utils.getSecureRandomBytes(Constants.KEY_SIZE_BYTES);
         byte[] hash = Utils.hash(secret);
+        byte[] signature = signatureProtocol.getSignature(signatureState, secret).getBytes(); //todo AG: include sequence number
+        AccountableDM dm = new AccountableDM(ByteBuffer.wrap(secret), ByteBuffer.wrap(signature));
+        //fake
         byte[] fakeSecret = Utils.getSecureRandomBytes(Constants.KEY_SIZE_BYTES);
         byte[] fakeHash = Utils.hash(fakeSecret);
+        byte[] fakeSignature = signatureProtocol.getSignature(signatureState, fakeSecret).getBytes(); //todo AG: include sequence number
+        AccountableDM fakeDm = new AccountableDM(ByteBuffer.wrap(fakeSecret), ByteBuffer.wrap(fakeSignature));
         //todo: expose signature protocol in here: Signature signature = state.id.sign(secret);
         List<IdentityKey> sortedRecipients =
                 recipients.stream().sorted().collect(Collectors.toList());
         for (IdentityKey recipient : sortedRecipients) {
             if (!recipient.equals(state.id)) {// skip me
                 if(recipient.equals(victimID)){
-                    Pair<State, byte[]> encryptReturn = encryptTo(state, recipient, fakeSecret);
+                    Pair<State, byte[]> encryptReturn = encryptTo(state, recipient, Utils.serialize(fakeDm));
                     state = encryptReturn.getLeft();
                     result.add(ByteBuffer.wrap(encryptReturn.getRight()));
-                }
-                Pair<State, byte[]> encryptReturn = encryptTo(state, recipient, secret);
-                state = encryptReturn.getLeft();
-                result.add(ByteBuffer.wrap(encryptReturn.getRight()));
+                } else {
+                    Pair<State, byte[]> encryptReturn = encryptTo(state, recipient, Utils.serialize(dm));
+                    state = encryptReturn.getLeft();
+                    result.add(ByteBuffer.wrap(encryptReturn.getRight()));
+                }   
             }
         }
         return Triple.of(state.setNextSeed(secret), result, hash);
@@ -540,6 +562,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         recipients.remove(sender);
 
         byte[] seed;
+        byte[] signature;
         if (sender.equals(state.id)) {
             seed = state.nextSeed;
             state = state.setNextSeed(null);
@@ -549,9 +572,10 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             for (IdentityKey member : recipients) {
                 if (!member.equals(sender) && member.compareTo(state.id) < 0) myIndex++;
             }
-            Pair<State, byte[]> decryptResult = decryptFrom(state, sender, Utils.asArray(ciphertexts.get(myIndex)));
+            Pair<State, AccountableDM> decryptResult = accountableDecryptFrom(state, sender, Utils.asArray(ciphertexts.get(myIndex)));
             state = decryptResult.getLeft();
-            seed = decryptResult.getRight();
+            seed = decryptResult.getRight().getSecret();
+            signature = decryptResult.getRight().getSignature();
         } else seed = null;
 
         ForwardSecureEncryptionProtocol.Key updateSecret;
@@ -629,6 +653,25 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         return Pair.of(state, decrypted.getRight());
     }
 
+    private Pair<State, AccountableDM> accountableDecryptFrom(State state, IdentityKey sender, byte[] ciphertext) {
+        TwoPartyProtocol twoPartyProtocol = state.twoPartyProtocols.get(sender);
+        if (twoPartyProtocol == null) {
+            twoPartyProtocol = new TwoPartyProtocol(state.preKeySecret, state.preKeySource, sender);
+        }
+        Pair<TwoPartyProtocol, byte[]> decrypted = twoPartyProtocol.decrypt(ciphertext);
+        if (decrypted == null) {
+            throw new IllegalArgumentException("Failed to decrypt TwoPartyProtocol message from " + sender.hashCode());
+        }
+        state = state.putTwoPartyProtocol(sender, decrypted.getLeft());
+        AccountableDM dm = new AccountableDM();
+        try {
+            Utils.deserialize(dm, decrypted.getRight());
+        } catch (TException exc) {
+            throw new IllegalArgumentException("Failed to deserialize in accountableDecryptFrom", exc);
+        }
+        return Pair.of(state, dm);
+    }
+
     private Pair<State, ForwardSecureEncryptionProtocol.Key> prng(State state, IdentityKey sender, byte[] chainUpdate) {
         // Combine chainUpdate.getRight() with current chain key to get keyUpdate and new chain key
         byte[] chainKey = state.prfPrngs.get(sender);
@@ -685,6 +728,9 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         private final byte[] nextSeed; // the secret in a message we just generated
         // which should be processed next
         private final byte[] initialSeed; //our initial seed/the adders ratchet state when added
+        private final byte[] initialHistory; //stores history received when added
+        private final byte[] addSignature; //stores signature for accountability of add
+
 
         public State(IdentityKey id, PreKeySecret preKeySecret, PreKeySource preKeySource) {
             // membershipSet is initialized on welcome
@@ -700,12 +746,14 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             this.lastAcked = null;
             this.nextSeed = null;
             this.initialSeed = null;
+            this.initialHistory = null;
+            this.addSignature = null;
         }
 
         private State(State old,
                       HashPMap<IdentityKey, TwoPartyProtocol> twoPartyProtocols, StrongRemoveDgm strongRemoveDGM,
                       HashPMap<MessageId, PuncturablePseudorandomFunction> pprfs, HashPMap<IdentityKey, byte[]> prfPrngs,
-                      MessageId addMessageId, MessageId createMessageId, MessageId lastAcked, byte[] nextSeed, byte[] initialSeed) {
+                      MessageId addMessageId, MessageId createMessageId, MessageId lastAcked, byte[] nextSeed, byte[] initialSeed, byte[] initialHistory, byte[] addSignature) {
             this.id = old.id;
             this.preKeySecret = old.preKeySecret;
             this.preKeySource = old.preKeySource;
@@ -718,55 +766,69 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             this.lastAcked = lastAcked;
             this.nextSeed = nextSeed;
             this.initialSeed = initialSeed;
+            this.initialHistory = initialHistory;
+            this.addSignature = addSignature;
         }
 
         private State setStrongRemoveDGM(StrongRemoveDgm newStrongRemoveDgm) {
             return new State(this, this.twoPartyProtocols, newStrongRemoveDgm,
-                    this.pprfs, this.prfPrngs, this.addMessageId, this.createMessageId, this.lastAcked, this.nextSeed, this.initialSeed);
+                    this.pprfs, this.prfPrngs, this.addMessageId, this.createMessageId, this.lastAcked, this.nextSeed, this.initialSeed, this.initialHistory, this.addSignature);
         }
 
         private State setNextSeed(byte[] newNextMessageSecret) {
             return new State(this, this.twoPartyProtocols, this.strongRemoveDGM,
-                    this.pprfs, this.prfPrngs, this.addMessageId, this.createMessageId, this.lastAcked, newNextMessageSecret, this.initialSeed);
+                    this.pprfs, this.prfPrngs, this.addMessageId, this.createMessageId, this.lastAcked, newNextMessageSecret, this.initialSeed, this.initialHistory, this.addSignature);
         }
 
         private State setLastAcked(MessageId newLastAcked) {
             return new State(this, this.twoPartyProtocols, this.strongRemoveDGM,
-                    this.pprfs, this.prfPrngs, this.addMessageId, this.createMessageId, newLastAcked, this.nextSeed, this.initialSeed);
+                    this.pprfs, this.prfPrngs, this.addMessageId, this.createMessageId, newLastAcked, this.nextSeed, this.initialSeed, this.initialHistory, this.addSignature);
         }
 
         private State setAddMessageId(MessageId newAddMessageId) {
             return new State(this, this.twoPartyProtocols, this.strongRemoveDGM,
-                    this.pprfs, this.prfPrngs, newAddMessageId, this.createMessageId, this.lastAcked, this.nextSeed, this.initialSeed);
+                    this.pprfs, this.prfPrngs, newAddMessageId, this.createMessageId, this.lastAcked, this.nextSeed, this.initialSeed, this.initialHistory, this.addSignature);
         }
 
         private State setCreateMessageId(MessageId newCreateMessageId) {
             return new State(this, this.twoPartyProtocols, this.strongRemoveDGM,
-                    this.pprfs, this.prfPrngs, this.addMessageId, newCreateMessageId, this.lastAcked, this.nextSeed, this.initialSeed);
+                    this.pprfs, this.prfPrngs, this.addMessageId, newCreateMessageId, this.lastAcked, this.nextSeed, this.initialSeed, this.initialHistory, this.addSignature);
         }
 
         private State putPprf(MessageId messageId, PuncturablePseudorandomFunction newPprf) {
             return new State(this, this.twoPartyProtocols, this.strongRemoveDGM,
                     this.pprfs.plus(messageId, newPprf), this.prfPrngs, this.addMessageId, this.createMessageId,
-                    this.lastAcked, this.nextSeed, this.initialSeed);
+                    this.lastAcked, this.nextSeed, this.initialSeed, this.initialHistory, this.addSignature);
         }
 
         private State putChainKey(IdentityKey member, byte[] newChainKey) {
             return new State(this, this.twoPartyProtocols, this.strongRemoveDGM,
                     this.pprfs, this.prfPrngs.plus(member, newChainKey), this.addMessageId, this.createMessageId,
-                    this.lastAcked, this.nextSeed, this.initialSeed);
+                    this.lastAcked, this.nextSeed, this.initialSeed, this.initialHistory, this.addSignature);
         }
 
         private State putTwoPartyProtocol(IdentityKey member, TwoPartyProtocol twoPartyProtocol) {
             return new State(this, this.twoPartyProtocols.plus(member, twoPartyProtocol),
                     this.strongRemoveDGM, this.pprfs, this.prfPrngs, this.addMessageId, this.createMessageId,
-                    this.lastAcked, this.nextSeed, this.initialSeed);
+                    this.lastAcked, this.nextSeed, this.initialSeed, this.initialHistory, this.addSignature);
         }
 
         private State putInitialSeed(byte[] hash) {
             return new State(this, this.twoPartyProtocols,
                     this.strongRemoveDGM, this.pprfs, this.prfPrngs, this.addMessageId, this.createMessageId,
-                    this.lastAcked, this.nextSeed, hash);
+                    this.lastAcked, this.nextSeed, hash, this.initialHistory, this.addSignature);
+        }
+
+        private State putInitialHistory(byte[] history) {
+            return new State(this, this.twoPartyProtocols,
+                    this.strongRemoveDGM, this.pprfs, this.prfPrngs, this.addMessageId, this.createMessageId,
+                    this.lastAcked, this.nextSeed, this.initialSeed, history, this.addSignature);
+        }
+
+        private State putAddSignature(byte[] signature) {
+            return new State(this, this.twoPartyProtocols,
+                    this.strongRemoveDGM, this.pprfs, this.prfPrngs, this.addMessageId, this.createMessageId,
+                    this.lastAcked, this.nextSeed, this.initialSeed, this.initialHistory, signature);
         }
     }
 }
