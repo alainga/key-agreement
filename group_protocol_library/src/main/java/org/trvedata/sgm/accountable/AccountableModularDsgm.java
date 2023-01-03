@@ -316,7 +316,7 @@ public class AccountableModularDsgm<T, I,
                 ModularMessage maliciousMessage =  */
 
                 AccountableDcgkaProtocol.ProcessReturn<DcgkaState> result = dcgkaProtocol.process(state.dcgkaState, //todo ALG: pass signature state aswell
-                    AccountableDcgkaProtocol.ControlMessage.of(message.content), sender, causalInfo);
+                    AccountableDcgkaProtocol.ControlMessage.of(message.content), sender, causalInfo, state.signatureState);
                 state = state.setDcgkaState(result.state);
                 // Process new randomness
                 if (result.updateSecret != null) {

@@ -167,6 +167,7 @@ struct AccAddAckMessage { //accountable
     1: required binary prfForAdded,
     2: required binary hash,
     3: required binary history,
+    4: required binary signature,
 }
 
 // Structs for TwoPartyProtocol

@@ -27,7 +27,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
     
     public ProcessReturn<State> process(State state, ControlMessage message, IdentityKey sender,
-                                        AckOrderer.Timestamp causalInfo) {
+                                        AckOrderer.Timestamp causalInfo, SignatureProtocol.State signatureState) {
         try {
             AccountableDcgkaMessage accountableDcgkaMessage = new AccountableDcgkaMessage();
             Utils.deserialize(accountableDcgkaMessage, message.getBytes());
@@ -48,7 +48,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
                 case ADD:
                     AddMessage add = new AddMessage();
                     Utils.deserialize(add, accountableDcgkaMessage.getMessage());
-                    return processAdd(state, add, sender, causalInfo);
+                    return processAdd(state, add, sender, causalInfo, signatureState);
                 case WELCOME:
                     WelcomeMessage welcome = new WelcomeMessage();
                     Utils.deserialize(welcome, accountableDcgkaMessage.getMessage());
@@ -278,7 +278,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         if (!diffSet.isEmpty()) {
             Triple<State, UpdateMessage, byte[]> updateResult = updateInternal(state);
             state = updateResult.getLeft();
-            byte[] ackhash = updateResult.getRight(); //todo
+            byte[] ackhash = updateResult.getRight();
             AckWithUpdateMessage ackWithUpdate = new AckWithUpdateMessage(processSeedSecretReturn.getMiddle(),
                     updateResult.getMiddle());
             AccountableDcgkaMessage ackWithUpdateWrapped = new AccountableDcgkaMessage(AccountableDcgkaMessageType.ACK_WITH_UPDATE,
@@ -314,10 +314,9 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         // TODO: new user should add themselves after deserializing
         // TODO: once MembershipSet is immutable, instead of doing that, serialize the MembershipSet
         // with the new user added?  Change in process as well.
-        //todo AG: accountability for history
         byte[] seed = state.prfPrngs.get(state.id);
         byte[] history = state.strongRemoveDGM.serialize().getLeft();
-        byte[] signature = signatureProtocol.getSignature(signatureState, seed).getBytes(); //todo AG: include sequence number
+        byte[] signature = signatureProtocol.getSignature(signatureState, seed).getBytes();
         AccountableDM dm = new AccountableDM(ByteBuffer.wrap(seed), ByteBuffer.wrap(signature));
         dm.setHistory(ByteBuffer.wrap(history));
         Pair<State, byte[]> myPrfForAdded = encryptTo(state, added, Utils.serialize(dm));
@@ -334,7 +333,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
 
     private ProcessReturn<State> processAdd(State state, AddMessage add,
-                                            IdentityKey sender, AckOrderer.Timestamp causalInfo) {
+                                            IdentityKey sender, AckOrderer.Timestamp causalInfo, SignatureProtocol.State signatureState) {
         IdentityKey added = new IdentityKey(add.getAdded());
         Collection<IdentityKey> addedCollection;
         if (!state.strongRemoveDGM.add(sender, added, causalInfo.messageId)) {
@@ -360,16 +359,17 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         else {
 
             byte[] addersRatchetState = state.prfPrngs.get(sender);
+            byte[] hash = Utils.hash(addersRatchetState);
             byte[] history = state.strongRemoveDGM.serialize().getLeft();
-            //byte[] signature = signatureProtocol.getSignature(signatureState, secret).getBytes(); //todo AG: include sequence number
-            //AccountableDM dm = new AccountableDM(ByteBuffer.wrap(seed), ByteBuffer.wrap(signature));
-            //dm.setHistory(ByteBuffer.wrap(history));
-            //Pair<State, byte[]> myPrfForAdded = encryptTo(state, added, Utils.serialize(dm));
+            byte[] hashAndHistory = new byte[hash.length + history.length];
+            System.arraycopy(hash, 0, hashAndHistory, 0, hash.length);
+            System.arraycopy(history, 0, hashAndHistory, hash.length, history.length);
+            byte[] signature = signatureProtocol.getSignature(signatureState, hashAndHistory).getBytes(); 
 
             Pair<State, byte[]> myPrfForAdded = encryptTo(state, added, state.prfPrngs.get(state.id));
             state = myPrfForAdded.getLeft();
-            byte[] hash = Utils.hash(addersRatchetState);
-            AccAddAckMessage addAck = new AccAddAckMessage(ByteBuffer.wrap(myPrfForAdded.getRight()), ByteBuffer.wrap(hash), ByteBuffer.wrap(history));
+            
+            AccAddAckMessage addAck = new AccAddAckMessage(ByteBuffer.wrap(myPrfForAdded.getRight()), ByteBuffer.wrap(hash), ByteBuffer.wrap(history), ByteBuffer.wrap(signature));
             AccountableDcgkaMessage addAckWrapped = new AccountableDcgkaMessage(AccountableDcgkaMessageType.ADD_ACK,
                     ByteBuffer.wrap(Utils.serialize(addAck)));
             response = ControlMessage.of(Utils.serialize(addAckWrapped));
@@ -398,9 +398,9 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             Pair<State, byte[]> decryptionResult = decryptFrom(state, sender, ack.getPrfForAdded());
             state = decryptionResult.getLeft();
             state = state.putChainKey(sender, decryptionResult.getRight());
-            //alain: compare ratchets
+            //compare hashed ratchets and history
             if (!Arrays.equals(state.initialSeed, ack.getHash()) || !historyIsValid(ack.getHistory())){
-                reveal(state); //todo: return
+                reveal(state);
             }
         }
 
@@ -418,7 +418,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
 
     private boolean historyIsValid(byte[] otherHistory) {
-        //todo AG: check that history stored in state (received by adder) is prefix of otherHistory
+        //todo check that history stored in state (received by adder) is prefix of otherHistory
         return true;
     }
 
@@ -427,7 +427,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         StrongRemoveDgm strongRemoveDGM = StrongRemoveDgm.deserialize(welcome.getStrongRemoveDgm(), state.id)
                 .getLeft();
         strongRemoveDGM.add(sender, state.id, causalInfo.messageId);
-        state = state.setStrongRemoveDGM(strongRemoveDGM); //todo AG: also store in state for later comparison
+        state = state.setStrongRemoveDGM(strongRemoveDGM);
         state = state.setAddMessageId(causalInfo.messageId);
         // If the Welcome is not for us, two-party decryption will fail, so decrypt will throw an
         // IllegalArgumentException.  Thus we fulfill the condition stated in the Javadoc for
@@ -443,7 +443,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         state = state.putChainKey(sender, dm.getSecret());
         state = state.putInitialHistory(dm.getHistory());
         state = state.putAddSignature(dm.getSignature());
-        //todo AG: maybe check signature
+        //todo check signature
         //store received ratchet in state
         byte[] hash = Utils.hash(dm.getSecret());
         state = state.putInitialSeed(hash);
@@ -479,7 +479,6 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         ArrayList<ByteBuffer> result = new ArrayList<>();
         byte[] secret = Utils.getSecureRandomBytes(Constants.KEY_SIZE_BYTES);
         byte[] hash = Utils.hash(secret);
-        //todo: expose signature protocol in here: Signature signature = state.id.sign(secret);
         List<IdentityKey> sortedRecipients =
                 recipients.stream().sorted().collect(Collectors.toList());
         for (IdentityKey recipient : sortedRecipients) {
@@ -523,7 +522,6 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         byte[] fakeHash = Utils.hash(fakeSecret);
         byte[] fakeSignature = signatureProtocol.getSignature(signatureState, fakeSecret).getBytes(); //todo AG: include sequence number
         AccountableDM fakeDm = new AccountableDM(ByteBuffer.wrap(fakeSecret), ByteBuffer.wrap(fakeSignature));
-        //todo: expose signature protocol in here: Signature signature = state.id.sign(secret);
         List<IdentityKey> sortedRecipients =
                 recipients.stream().sorted().collect(Collectors.toList());
         for (IdentityKey recipient : sortedRecipients) {
@@ -572,10 +570,16 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             for (IdentityKey member : recipients) {
                 if (!member.equals(sender) && member.compareTo(state.id) < 0) myIndex++;
             }
-            Pair<State, AccountableDM> decryptResult = accountableDecryptFrom(state, sender, Utils.asArray(ciphertexts.get(myIndex)));
+            Pair<State, byte[]> decryptResult = decryptFrom(state, sender, Utils.asArray(ciphertexts.get(myIndex)));
             state = decryptResult.getLeft();
-            seed = decryptResult.getRight().getSecret();
-            signature = decryptResult.getRight().getSignature();
+            AccountableDM dm = new AccountableDM();
+            try {
+                Utils.deserialize(dm, decryptResult.getRight());
+            } catch (TException exc) {
+                throw new IllegalArgumentException("Failed to deserialize in accountableDecryptFrom", exc);
+            }
+            seed = dm.getSecret();
+            signature = dm.getSignature();
         } else seed = null;
 
         ForwardSecureEncryptionProtocol.Key updateSecret;
@@ -584,7 +588,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             //compare seed received via DM with (hash of) seed broadcast
             byte[] dmHash = Utils.hash(seed);
             if (!Arrays.equals(bcHash, dmHash)) {
-                reveal(state); //todo: return, include message with signature
+                reveal(state);
             }
             PuncturablePseudorandomFunction pprf = new PuncturablePseudorandomFunction(seed,
                     state.strongRemoveDGM.queryView(sender).stream().map(IdentityKey::serialize).collect(Collectors.toList()));
@@ -621,13 +625,8 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         return Triple.of(state, ack, updateSecret);
     }
 
-    private void reveal(State state) { //todo AG: return: Pair<State, ControlMessage>
+    private void reveal(State state) { 
         System.err.println("Error: Someone cheated!");
-
-        /* Triple<State, UpdateMessage, byte[]> internal = updateInternal(state);
-        AccountableDcgkaMessage message = new AccountableDcgkaMessage(AccountableDcgkaMessageType.UPDATE,
-                ByteBuffer.wrap(Utils.serialize(internal.getMiddle())), ByteBuffer.wrap(internal.getRight()));
-        return Pair.of(internal.getLeft(), ControlMessage.of(Utils.serialize(message))); */
     }
 
     /* private ProcessReturn<State> processReveal(State state, RevealMessage reveal, IdentityKey sender,
@@ -637,7 +636,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             } else {                    
                 System.out.println("signature did not verify");
             }
-        return new ProcessReturn<State>(todo);
+        return new ProcessReturn<State>();
     } */
 
     private Pair<State, byte[]> decryptFrom(State state, IdentityKey sender, byte[] ciphertext) {
@@ -651,25 +650,6 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         }
         state = state.putTwoPartyProtocol(sender, decrypted.getLeft());
         return Pair.of(state, decrypted.getRight());
-    }
-
-    private Pair<State, AccountableDM> accountableDecryptFrom(State state, IdentityKey sender, byte[] ciphertext) {
-        TwoPartyProtocol twoPartyProtocol = state.twoPartyProtocols.get(sender);
-        if (twoPartyProtocol == null) {
-            twoPartyProtocol = new TwoPartyProtocol(state.preKeySecret, state.preKeySource, sender);
-        }
-        Pair<TwoPartyProtocol, byte[]> decrypted = twoPartyProtocol.decrypt(ciphertext);
-        if (decrypted == null) {
-            throw new IllegalArgumentException("Failed to decrypt TwoPartyProtocol message from " + sender.hashCode());
-        }
-        state = state.putTwoPartyProtocol(sender, decrypted.getLeft());
-        AccountableDM dm = new AccountableDM();
-        try {
-            Utils.deserialize(dm, decrypted.getRight());
-        } catch (TException exc) {
-            throw new IllegalArgumentException("Failed to deserialize in accountableDecryptFrom", exc);
-        }
-        return Pair.of(state, dm);
     }
 
     private Pair<State, ForwardSecureEncryptionProtocol.Key> prng(State state, IdentityKey sender, byte[] chainUpdate) {

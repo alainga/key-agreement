@@ -52,7 +52,7 @@ public interface AccountableDcgkaProtocol<T, I, S extends AccountableDcgkaProtoc
      * If the return value indicates that this message removed us, it should be treated like a null value,
      * so that the Orderer won't let us process messages that causally depend on it.
      */
-    ProcessReturn<S> process(S state, ControlMessage message, IdentityKey sender, T causalInfo);
+    ProcessReturn<S> process(S state, ControlMessage message, IdentityKey sender, T causalInfo, SignatureProtocol.State signatureState);
 
     /**
      * Returns (updated state, input to pass to {@link Orderer#getNextOrderInfo} for the most recently
