@@ -36,15 +36,15 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
                 case CREATE:
                     CreateMessage create = new CreateMessage();
                     Utils.deserialize(create, accountableDcgkaMessage.getMessage());
-                    return processCreate(state, create, sender, causalInfo, hash);
+                    return processCreate(state, create, sender, causalInfo, hash, signatureState);
                 case UPDATE:
                     UpdateMessage update = new UpdateMessage();
                     Utils.deserialize(update, accountableDcgkaMessage.getMessage());
-                    return processUpdate(state, update, sender, causalInfo, hash);
+                    return processUpdate(state, update, sender, causalInfo, hash, signatureState);
                 case REMOVE:
                     RemoveMessage remove = new RemoveMessage();
                     Utils.deserialize(remove, accountableDcgkaMessage.getMessage());
-                    return processRemove(state, remove, sender, causalInfo, hash);
+                    return processRemove(state, remove, sender, causalInfo, hash, signatureState);
                 case ADD:
                     AddMessage add = new AddMessage();
                     Utils.deserialize(add, accountableDcgkaMessage.getMessage());
@@ -52,7 +52,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
                 case WELCOME:
                     WelcomeMessage welcome = new WelcomeMessage();
                     Utils.deserialize(welcome, accountableDcgkaMessage.getMessage());
-                    return processWelcome(state, welcome, sender, causalInfo);
+                    return processWelcome(state, welcome, sender, causalInfo, signatureState);
                 case ACK:
                     AckMessage ack = new AckMessage();
                     Utils.deserialize(ack, accountableDcgkaMessage.getMessage());
@@ -60,7 +60,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
                 case ACK_WITH_UPDATE:
                     AckWithUpdateMessage ackWithUpdate = new AckWithUpdateMessage();
                     Utils.deserialize(ackWithUpdate, accountableDcgkaMessage.getMessage());
-                    return processAckWithUpdate(state, ackWithUpdate, sender, causalInfo, hash);
+                    return processAckWithUpdate(state, ackWithUpdate, sender, causalInfo, hash, signatureState);
                 case ADD_ACK:
                     AccAddAckMessage addAck = new AccAddAckMessage();
                     Utils.deserialize(addAck, accountableDcgkaMessage.getMessage());
@@ -94,7 +94,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
 
     private ProcessReturn<State> processCreate(State state, CreateMessage create, IdentityKey sender,
-                                               AckOrderer.Timestamp causalInfo, byte[] hash) {
+                                               AckOrderer.Timestamp causalInfo, byte[] hash, SignatureProtocol.State signatureState) {
         ArrayList<IdentityKey> members = deserializeIdList(create.getIdsExcludingSender());
         members.add(sender);
         if (!members.contains(state.id)) {
@@ -103,7 +103,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         }
         state = state.setStrongRemoveDGM(new StrongRemoveDgm(members, state.id));
         Triple<State, AckMessage, ForwardSecureEncryptionProtocol.Key> processSeedSecretReturn =
-                processSeedSecret(state, sender, causalInfo.messageId, create.getCiphertexts(), hash);
+                processSeedSecret(state, sender, causalInfo.messageId, create.getCiphertexts(), hash, signatureState);
         state = processSeedSecretReturn.getLeft();
         state = state.setCreateMessageId(causalInfo.messageId);
         ControlMessage response;
@@ -200,16 +200,6 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         return Triple.of(state, update, generateResult.getRight());
     }
 
-    //for case in processRemove, todo: ok?
-    private Triple<State, UpdateMessage, byte[]> updateInternal(State state) {
-        UpdateMessage update = new UpdateMessage();
-        Triple<State, ? extends List<ByteBuffer>, byte[]> generateResult = generateSeedSecret(state,
-                state.strongRemoveDGM.queryWholeWithoutMe());
-        state = generateResult.getLeft();
-        update.setCiphertexts(generateResult.getMiddle());
-        return Triple.of(state, update, generateResult.getRight());
-    }
-
     private Triple<State, UpdateMessage, byte[]> maliciousUpdateInternal(State state, IdentityKey victimID, SignatureProtocol.State signatureState) {
         UpdateMessage update = new UpdateMessage();
         Triple<State, ? extends List<ByteBuffer>, byte[]> generateResult = maliciousGenerateSeedSecret(state,
@@ -220,9 +210,9 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
 
     private ProcessReturn<State> processUpdate(State state, UpdateMessage update, IdentityKey sender,
-                                               AckOrderer.Timestamp causalInfo, byte[] hash) {
+                                               AckOrderer.Timestamp causalInfo, byte[] hash, SignatureProtocol.State signatureState) {
         Triple<State, AckMessage, ForwardSecureEncryptionProtocol.Key> processSeedSecretReturn =
-                processSeedSecret(state, sender, causalInfo.messageId, update.getCiphertexts(), hash);
+                processSeedSecret(state, sender, causalInfo.messageId, update.getCiphertexts(), hash, signatureState);
         state = processSeedSecretReturn.getLeft();
         ControlMessage response;
         if (processSeedSecretReturn.getMiddle() == null) response = ControlMessage.of(null);
@@ -255,7 +245,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
 
     private ProcessReturn<State> processRemove(State state, RemoveMessage remove, IdentityKey sender,
-                                               AckOrderer.Timestamp causalInfo, byte[] hash) {
+                                               AckOrderer.Timestamp causalInfo, byte[] hash, SignatureProtocol.State signatureState) {
         IdentityKey removed = new IdentityKey(remove.getRemoved());
         Collection<IdentityKey> removedCollection = state.strongRemoveDGM.remove(sender,
                 Collections.singleton(removed), causalInfo.messageId);
@@ -268,7 +258,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         }
 
         Triple<State, AckMessage, ForwardSecureEncryptionProtocol.Key> processSeedSecretReturn =
-                processSeedSecret(state, sender, causalInfo.messageId, remove.getCiphertexts(), hash);
+                processSeedSecret(state, sender, causalInfo.messageId, remove.getCiphertexts(), hash, signatureState);
         state = processSeedSecretReturn.getLeft();
 
         // Do ack-with-update if needed
@@ -276,7 +266,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         HashSet<IdentityKey> diffSet = state.strongRemoveDGM.queryView(sender);
         diffSet.removeAll(state.strongRemoveDGM.queryWhole());
         if (!diffSet.isEmpty()) {
-            Triple<State, UpdateMessage, byte[]> updateResult = updateInternal(state);
+            Triple<State, UpdateMessage, byte[]> updateResult = updateInternal(state, signatureState);
             state = updateResult.getLeft();
             byte[] ackhash = updateResult.getRight();
             AckWithUpdateMessage ackWithUpdate = new AckWithUpdateMessage(processSeedSecretReturn.getMiddle(),
@@ -300,10 +290,10 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
 
     private ProcessReturn<State> processAckWithUpdate(State state, AckWithUpdateMessage ackWithUpdate,
-                                                      IdentityKey sender, AckOrderer.Timestamp causalInfo, byte[] hash) {
+                                                      IdentityKey sender, AckOrderer.Timestamp causalInfo, byte[] hash, SignatureProtocol.State signatureState) {
         ProcessReturn<State> ackResult = processAck(state, ackWithUpdate.getAck(), sender, causalInfo);
         ProcessReturn<State> updateResult = processUpdate(ackResult.state, ackWithUpdate.getUpdate(),
-                sender, causalInfo, hash);
+                sender, causalInfo, hash, signatureState);
         return new ProcessReturn<>(updateResult.state, DcgkaMessageType.UPDATE, updateResult.responseMessage,
                 updateResult.updateSecret, null, Collections.emptyList(), Collections.emptyList(),
                 causalInfo.messageId, ackResult.ackedMessageIds);
@@ -400,6 +390,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             state = state.putChainKey(sender, decryptionResult.getRight());
             //compare hashed ratchets and history
             if (!Arrays.equals(state.initialSeed, ack.getHash()) || !historyIsValid(ack.getHistory())){
+                System.out.println("hash and history did not verify in processAddAck");
                 reveal(state);
             }
         }
@@ -423,7 +414,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
     }
 
     private ProcessReturn<State> processWelcome(State state, WelcomeMessage welcome, IdentityKey sender,
-                                                AckOrderer.Timestamp causalInfo) {
+                                                AckOrderer.Timestamp causalInfo, SignatureProtocol.State signatureState) {
         StrongRemoveDgm strongRemoveDGM = StrongRemoveDgm.deserialize(welcome.getStrongRemoveDgm(), state.id)
                 .getLeft();
         strongRemoveDGM.add(sender, state.id, causalInfo.messageId);
@@ -440,10 +431,12 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
         } catch (TException exc) {
             throw new IllegalArgumentException("Failed to deserialize in processWelcome", exc);
         }
+        if(!signatureProtocol.verify(signatureState, true, dm.getSecret(), sender, new SignatureProtocol.Signature(dm.getSignature()))){
+            reveal(state);
+        } 
         state = state.putChainKey(sender, dm.getSecret());
         state = state.putInitialHistory(dm.getHistory());
         state = state.putAddSignature(dm.getSignature());
-        //todo check signature
         //store received ratchet in state
         byte[] hash = Utils.hash(dm.getSecret());
         state = state.putInitialSeed(hash);
@@ -475,23 +468,6 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
      * adds those encryptions to message (mutably), and stores the secret in an updated state,
      * which is returned.
      */
-    private Triple<State, ? extends List<ByteBuffer>, byte[]> generateSeedSecret(State state, Collection<IdentityKey> recipients) {
-        ArrayList<ByteBuffer> result = new ArrayList<>();
-        byte[] secret = Utils.getSecureRandomBytes(Constants.KEY_SIZE_BYTES);
-        byte[] hash = Utils.hash(secret);
-        List<IdentityKey> sortedRecipients =
-                recipients.stream().sorted().collect(Collectors.toList());
-        for (IdentityKey recipient : sortedRecipients) {
-            if (!recipient.equals(state.id)) {// skip me
-                Pair<State, byte[]> encryptReturn = encryptTo(state, recipient, secret);
-                state = encryptReturn.getLeft();
-                result.add(ByteBuffer.wrap(encryptReturn.getRight()));
-            }
-        }
-        return Triple.of(state.setNextSeed(secret), result, hash);
-    }
-
-    //same function but with signature state for accountability
     private Triple<State, ? extends List<ByteBuffer>, byte[]> generateSeedSecret(State state, Collection<IdentityKey> recipients, SignatureProtocol.State signatureState) {
         ArrayList<ByteBuffer> result = new ArrayList<>();
         byte[] secret = Utils.getSecureRandomBytes(Constants.KEY_SIZE_BYTES);
@@ -555,7 +531,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
      * to addSecret as recipients.  If sender is us, this will instead use sender.nextMessageSecret.
      */
     private Triple<State, AckMessage, ForwardSecureEncryptionProtocol.Key> processSeedSecret(
-            State state, IdentityKey sender, MessageId messageId, List<ByteBuffer> ciphertexts, byte[] bcHash) {
+            State state, IdentityKey sender, MessageId messageId, List<ByteBuffer> ciphertexts, byte[] bcHash, SignatureProtocol.State signatureState) {
         HashSet<IdentityKey> recipients = state.strongRemoveDGM.queryView(sender);
         recipients.remove(sender);
 
@@ -580,6 +556,10 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             }
             seed = dm.getSecret();
             signature = dm.getSignature();
+            if(!signatureProtocol.verify(signatureState, true, seed, sender, new SignatureProtocol.Signature(signature))){
+                System.out.println("signature did not verify in processSeedSecret, seed="+seed+", signature="+signature+", singatureState="+signatureState);
+                reveal(state);
+            } 
         } else seed = null;
 
         ForwardSecureEncryptionProtocol.Key updateSecret;
@@ -588,6 +568,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
             //compare seed received via DM with (hash of) seed broadcast
             byte[] dmHash = Utils.hash(seed);
             if (!Arrays.equals(bcHash, dmHash)) {
+                System.out.println("hash did not verify in processSeedSecret");
                 reveal(state);
             }
             PuncturablePseudorandomFunction pprf = new PuncturablePseudorandomFunction(seed,
@@ -627,6 +608,7 @@ public class FullAccountableDcgkaProtocol implements AccountableDcgkaProtocol<Ac
 
     private void reveal(State state) { 
         System.err.println("Error: Someone cheated!");
+        //throw new IllegalArgumentException("Error: Someone cheated!");
     }
 
     /* private ProcessReturn<State> processReveal(State state, RevealMessage reveal, IdentityKey sender,
