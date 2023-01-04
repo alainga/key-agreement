@@ -28,6 +28,7 @@ public class AccountableDcgkaTest {
         alice.send("Msg4 plain".getBytes());
     }
 
+    /* note that this will throw an error in process, see javadoc in DcgkaProtocl.java process */
     private void testAdd(final AccountableDsgmClient.DgmClientImplementationConfiguration implementationConfiguration) {
         Network network = new TotalOrderSimpleNetwork(); // default Network with instant delivery
         AccountableDsgmClientFactory.DgmClientFactoryResult factoryResult = AccountableDsgmClientFactory.createClients(network,
@@ -68,43 +69,7 @@ public class AccountableDcgkaTest {
         
         //mallet.maliciousUpdate();
         System.out.println("mallet calls maliciousUpdate()");
-        mallet.maliciousUpdate(poorBob.mIdentityKeyPair.publicKey);
-        //callstack of update:
-        /* mallelt.update();
-        
-            Pair<? extends DsgmProtocol.State, byte[]> result = mDsgmProtocol.update(mDgmProtocolState);
-
-                Pair<DcgkaState, DcgkaProtocol.ControlMessage> dcgkaUpdate = dcgkaProtocol.update(state.dcgkaState);
-
-                    Triple<State, UpdateMessage, byte[]> internal = updateInternal(state); // byte[] is the hash of the seed secret
-                    AccountableDcgkaMessage message = new AccountableDcgkaMessage(AccountableDcgkaMessageType.UPDATE,ByteBuffer.wrap(Utils.serialize(internal.getMiddle())), ByteBuffer.wrap(internal.getRight()));
-                    return Pair.of(internal.getLeft(), ControlMessage.of(Utils.serialize(message)));
-
-                state = state.setDcgkaState(dcgkaUpdate.getLeft());
-                return wrapAndProcess(state, dcgkaUpdate.getRight().getBytes(), true, true);
-                
-            //mDgmProtocolState = result.getLeft();
-            sendMessageToGroupMembers(result.getRight());
-
-                broadcast(message);
-
-                    Client.mNetwork.broadcast(this, message);
-
-                        public void broadcast(final Client sender, final byte[] message) {
-                            for (Client client : mIdentifierToClient.values()) {
-                                if (client != sender) queuedMessages.add(Triple.of(sender, client, message));
-                            }
-                            if (!isActive) {
-                                // Prevent recursive calls from reaching this block
-                                isActive = true;
-                                while (!queuedMessages.isEmpty()) {
-                                    Triple<Client, Client, byte[]> toSend = queuedMessages.pop();
-                                    toSend.getMiddle().handleMessageFromNetwork(toSend.getLeft().getIdentifier(), toSend.getRight());
-                                }
-                                isActive = false;
-                            }
-                        } */
-        
+        mallet.maliciousUpdate(poorBob.mIdentityKeyPair.publicKey);        
     }
 
     @Test
