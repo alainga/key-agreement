@@ -35,9 +35,16 @@ public class CliEvaluation implements Callable<Integer> {
         System.exit(exitCode);
     }
 
-    @Override
+    /* @Override
     public Integer call() throws Exception {
         final EvaluationSimulation evaluationSimulation = new EvaluationSimulation(this);
+        evaluationSimulation.run();
+        return 0;
+    } */
+
+    @Override
+    public Integer call() throws Exception {
+        final AccountableEvaluationSimulation evaluationSimulation = new AccountableEvaluationSimulation(this);
         evaluationSimulation.run();
         return 0;
     }

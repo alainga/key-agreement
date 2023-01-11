@@ -98,7 +98,7 @@ public class LocalSimulation {
     }
 
     private DsgmClient.DgmClientImplementationConfiguration createClientImplementation() {
-        return new DsgmClient.DgmClientImplementationConfiguration(DsgmClient.DcgkaChoice.FULL, true, true, true);
+        return new DsgmClient.DgmClientImplementationConfiguration(DsgmClient.DcgkaChoice.ACCOUNTABLE, true, true, true);
     }
 
     private ArrayList<ThreadedClient> createThreadedClients(final ThreadSafeNetwork network,
